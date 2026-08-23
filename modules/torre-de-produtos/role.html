@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Torre de Produtos</title>
+<link rel="stylesheet" href="../../assets/css/style.css">
+</head>
+<body>
+
+<div class="header-wrap"><div class="header-logo-row">
+  <div class="logo">
+    <svg class="logo-svg" width="26" height="26" viewBox="0 0 100 100">
+      <polygon points="50,8 68,22 68,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,8 32,22 32,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,32 76,48 76,62 50,54" fill="#dc2626"/>
+      <polygon points="50,32 24,48 24,62 50,54" fill="#dc2626"/>
+      <polygon points="50,56 84,74 84,94 50,84" fill="#1a3a5c"/>
+      <polygon points="50,56 16,74 16,94 50,84" fill="#1a3a5c"/>
+    </svg>
+    <div class="logo-tx"><b>Torre de Produtos</b><span>Portfólio 2026</span></div>
+  </div>
+</div></div>
+<div class="topbar">
+  <div class="user">
+    <div class="avatar" id="topbarAvatar">--</div>
+    <span id="topbarName">Carregando...</span>
+    <span class="logout-btn" onclick="handleLogout()">Sair</span>
+  </div>
+</div>
+
+<div class="home-wrap">
+  <span class="backlink" onclick="window.location.href='home.html'">← Voltar</span>
+  <h2>Como deseja acessar?</h2>
+  <p>Isso define se você poderá editar os roadmaps</p>
+  <div class="role-cards">
+    <div class="role-card" onclick="window.location.href='produtos.html?role=view'">
+      <div class="ic">👁</div><h4>Stakeholder</h4><span>Somente visualização</span>
+    </div>
+    <div class="role-card" onclick="window.location.href='produtos.html?role=edit'">
+      <div class="ic">✎</div><h4>PO</h4><span>Visualizar e editar</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../../assets/js/supabaseClient.js"></script>
+<script src="../../assets/js/auth.js"></script>
+<script>
+initTopbar('../../index.html');
+</script>
+</body>
+</html>

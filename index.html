@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal de Sistemas</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="logo">
+      <svg class="logo-svg" width="38" height="38" viewBox="0 0 100 100">
+        <polygon points="50,8 68,22 68,38 50,30" fill="#1a3a5c"/>
+        <polygon points="50,8 32,22 32,38 50,30" fill="#1a3a5c"/>
+        <polygon points="50,32 76,48 76,62 50,54" fill="#dc2626"/>
+        <polygon points="50,32 24,48 24,62 50,54" fill="#dc2626"/>
+        <polygon points="50,56 84,74 84,94 50,84" fill="#1a3a5c"/>
+        <polygon points="50,56 16,74 16,94 50,84" fill="#1a3a5c"/>
+      </svg>
+      <div class="logo-tx"><b>Portal de Sistemas</b><span>Acesso unificado</span></div>
+    </div>
+    <h1>Acessar plataforma</h1>
+    <p>Entre com suas credenciais</p>
+
+    <form id="loginForm">
+      <div class="field"><label>E-mail</label><input type="email" id="user" placeholder="seu.email@empresa.com" required></div>
+      <div class="field"><label>Senha</label><input type="password" id="pass" placeholder="••••••••" required></div>
+      <p class="error-msg hide" id="loginError">Usuário ou senha inválidos.</p>
+      <div class="forgot">Esqueci minha senha</div>
+      <button class="btn-login" type="submit" id="btnLogin">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabaseClient.js"></script>
+<script src="assets/js/auth.js"></script>
+<script>
+// Se já existe sessão ativa, pula direto pro dashboard.
+(async function () {
+  const user = await getUsuarioLogado();
+  if (user) window.location.href = 'dashboard.html';
+})();
+
+document.getElementById('loginForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const email = document.getElementById('user').value.trim();
+  const senha = document.getElementById('pass').value;
+  const btn = document.getElementById('btnLogin');
+  const erro = document.getElementById('loginError');
+
+  erro.classList.add('hide');
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+
+  const { error } = await fazerLogin(email, senha);
+
+  btn.disabled = false;
+  btn.textContent = 'Entrar';
+
+  if (error) {
+    erro.classList.remove('hide');
+    return;
+  }
+  window.location.href = 'dashboard.html';
+});
+</script>
+</body>
+</html>

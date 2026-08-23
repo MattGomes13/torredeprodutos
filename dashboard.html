@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal de Sistemas</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="header-wrap"><div class="header-logo-row">
+  <div class="logo">
+    <svg class="logo-svg" width="26" height="26" viewBox="0 0 100 100">
+      <polygon points="50,8 68,22 68,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,8 32,22 32,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,32 76,48 76,62 50,54" fill="#dc2626"/>
+      <polygon points="50,32 24,48 24,62 50,54" fill="#dc2626"/>
+      <polygon points="50,56 84,74 84,94 50,84" fill="#1a3a5c"/>
+      <polygon points="50,56 16,74 16,94 50,84" fill="#1a3a5c"/>
+    </svg>
+    <div class="logo-tx"><b>Portal de Sistemas</b><span>Acesso unificado</span></div>
+  </div>
+</div></div>
+<div class="topbar">
+  <div class="user">
+    <div class="avatar" id="topbarAvatar">--</div>
+    <span id="topbarName">Carregando...</span>
+    <span class="logout-btn" onclick="handleLogout()">Sair</span>
+  </div>
+</div>
+
+<div class="home-wrap">
+  <h2>Bem-vindo</h2>
+  <p>Escolha o sistema que deseja acessar</p>
+  <div class="cards" id="systemCards">
+    <div class="card" onclick="window.location.href='modules/torre-de-produtos/home.html'">
+      <div class="card-ic">▣</div>
+      <h3>Torre de Produtos</h3>
+      <p>Roadmaps e visão macro do portfólio de produtos.</p>
+      <div class="arrow">Acessar →</div>
+    </div>
+    <!-- Próximos sistemas entram aqui como novos .card -->
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabaseClient.js"></script>
+<script src="assets/js/auth.js"></script>
+<script>
+initTopbar('index.html');
+</script>
+</body>
+</html>

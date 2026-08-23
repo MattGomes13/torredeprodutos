@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Torre de Produtos</title>
+<link rel="stylesheet" href="../../assets/css/style.css">
+</head>
+<body>
+
+<div class="header-wrap"><div class="header-logo-row">
+  <div class="logo">
+    <svg class="logo-svg" width="26" height="26" viewBox="0 0 100 100">
+      <polygon points="50,8 68,22 68,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,8 32,22 32,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,32 76,48 76,62 50,54" fill="#dc2626"/>
+      <polygon points="50,32 24,48 24,62 50,54" fill="#dc2626"/>
+      <polygon points="50,56 84,74 84,94 50,84" fill="#1a3a5c"/>
+      <polygon points="50,56 16,74 16,94 50,84" fill="#1a3a5c"/>
+    </svg>
+    <div class="logo-tx"><b>Torre de Produtos</b><span>Portfólio 2026</span></div>
+  </div>
+</div></div>
+<div class="topbar">
+  <div class="user">
+    <div class="avatar" id="topbarAvatar">--</div>
+    <span id="topbarName">Carregando...</span>
+    <span class="logout-btn" onclick="handleLogout()">Sair</span>
+  </div>
+</div>
+
+<div class="home-wrap">
+  <span class="backlink" onclick="window.location.href='role.html'">← Voltar</span>
+  <h2 id="prodTitle">Produtos</h2>
+  <p id="prodSub">Selecione um produto</p>
+
+  <!-- A lista real de produtos ainda vai ser definida (dados a caminho). -->
+  <div class="prod-list" id="prodList">
+    <div class="placeholder" style="grid-column:1/-1">Aguardando definição dos produtos e seus dados.</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../../assets/js/supabaseClient.js"></script>
+<script src="../../assets/js/auth.js"></script>
+<script>
+initTopbar('../../index.html');
+
+const params = new URLSearchParams(window.location.search);
+const role = params.get('role') === 'edit' ? 'edit' : 'view';
+
+document.getElementById('prodTitle').textContent = role === 'view' ? 'Produtos · Stakeholder' : 'Produtos · PO';
+document.getElementById('prodSub').textContent = role === 'view' ? 'Visualização somente leitura' : 'Você pode editar os roadmaps';
+
+// TODO: quando os dados dos produtos chegarem, substituir o placeholder
+// acima por cards gerados a partir deles (ver .prod-item no style.css).
+</script>
+</body>
+</html>
