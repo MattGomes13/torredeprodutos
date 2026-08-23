@@ -215,10 +215,10 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
     <span class="hub-backlink" onclick="window.location.href='home.html'">← Voltar</span>
     <div class="eyebrow">Torre de controle · Portfólio 2026</div>
     <h1>Roadmaps consolidados</h1>
-    <div class="sub" id="subtxt">Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Nada sai deste navegador.</div>
+    <div class="sub" id="subtxt">Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Os dados ficam salvos no Supabase e são compartilhados com todos que acessam o portal.</div>
   </div>
   <div class="topbar-actions">
-    <button class="tb-btn" id="saveBtn" onclick="saveHub(true)" title="Salva a importação atual neste navegador — ao reabrir, tudo volta do jeito que você deixou">✓ Tudo salvo</button>
+    <button class="tb-btn" id="saveBtn" onclick="saveHub(true)" title="Salva a importação atual no Supabase — todo mundo que acessar o portal vê a mesma versão">✓ Tudo salvo</button>
     <button class="tb-btn tb-btn-outline" onclick="exportHub()" title="Gera um arquivo .html com a versão atual para enviar a outra pessoa">⇩ Exportar</button>
     <div class="clock">
       <b id="clockTime">--:--:--</b>
@@ -246,7 +246,7 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
 
   <div id="dashArea"></div>
 
-  <footer>PROCESSAMENTO 100% LOCAL · NENHUM DADO É ENVIADO A SERVIDORES · v1.1</footer>
+  <footer>DADOS SALVOS NO SUPABASE · COMPARTILHADO COM TODOS OS ACESSOS AO PORTAL · v1.2</footer>
 </div>
 
 
@@ -666,7 +666,7 @@ function render(){
       '<h3>Nenhum roadmap carregado</h3>'+
       '<p>Envie os arquivos HTML exportados de cada sistema (BankManager, Luna, Net Finanças, PIS...) para ver o painel consolidado, os totalizadores por produto e a tabela combinada de épicos.</p>'+
     '</div>';
-    document.getElementById('subtxt').textContent = 'Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Nada sai deste navegador.';
+    document.getElementById('subtxt').textContent = 'Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Os dados ficam salvos no Supabase e são compartilhados com todos que acessam o portal.';
     return;
   }
 
@@ -1063,9 +1063,11 @@ function renderTableForProduct(key){
 }
 
 /* ============================================================
-   PERSISTENCE (save/load the whole hub state in localStorage)
+   PERSISTENCE (save/load the whole hub state in Supabase — a única
+   linha da tabela "hubs", compartilhada por todo mundo que acessa o portal)
    ============================================================ */
-var HUB_STORAGE_KEY = 'bmRoadmapHub-state-v1';
+var HUB_TABLE = 'hubs';
+var HUB_ROW_ID = 'torre-de-produtos';
 var DIRTY = false; // true = there are unsaved changes since last save/load
 
 function markDirty(){
@@ -1083,32 +1085,34 @@ function updateSaveIndicator(){
     btn.textContent = '✓ Tudo salvo';
   }
 }
-function saveHub(showMsg){
+async function saveHub(showMsg){
   try {
+    var user = await getUsuarioLogado();
     var payload = {
+      id: HUB_ROW_ID,
       version: 1,
-      savedAt: new Date().toISOString(),
       products: PRODUCTS,
-      order: PRODUCT_ORDER
+      product_order: PRODUCT_ORDER,
+      updated_at: new Date().toISOString(),
+      updated_by: user ? user.id : null
     };
-    localStorage.setItem(HUB_STORAGE_KEY, JSON.stringify(payload));
+    var { error } = await supabaseClient.from(HUB_TABLE).upsert(payload);
+    if(error) throw error;
     DIRTY = false;
     updateSaveIndicator();
-    if(showMsg) showToast('Torre de Controle salva neste navegador', 'ok');
+    if(showMsg) showToast('Torre de Controle salva no Supabase', 'ok');
     return true;
   } catch(e){
-    if(showMsg) showToast('Não foi possível salvar (armazenamento cheio ou bloqueado)', 'err');
+    if(showMsg) showToast('Não foi possível salvar (verifique sua conexão ou as permissões no Supabase)', 'err');
     return false;
   }
 }
-function loadHub(){
+async function loadHub(){
   try {
-    var raw = localStorage.getItem(HUB_STORAGE_KEY);
-    if(!raw) return false;
-    var payload = JSON.parse(raw);
-    if(!payload || !payload.products || !payload.order) return false;
-    PRODUCTS = payload.products;
-    PRODUCT_ORDER = payload.order;
+    var { data, error } = await supabaseClient.from(HUB_TABLE).select('*').eq('id', HUB_ROW_ID).maybeSingle();
+    if(error || !data || !data.products || !data.product_order) return false;
+    PRODUCTS = data.products;
+    PRODUCT_ORDER = data.product_order;
     // recompute paletteIdx so newly-added products after a reload get a fresh color
     paletteIdx = PRODUCT_ORDER.length;
     return true;
@@ -1116,9 +1120,9 @@ function loadHub(){
     return false;
   }
 }
-function clearSavedHub(){
-  if(!confirm('Apagar os dados salvos da Torre de Controle neste navegador?\n\nOs roadmaps carregados agora na tela continuam visíveis até você recarregar a página, mas não serão restaurados automaticamente da próxima vez.')) return;
-  try { localStorage.removeItem(HUB_STORAGE_KEY); } catch(e){}
+async function clearSavedHub(){
+  if(!confirm('Apagar os dados salvos da Torre de Controle no Supabase?\n\nIsso afeta todo mundo que acessa o portal — os roadmaps carregados agora na tela continuam visíveis até você recarregar a página, mas ninguém mais vai ver esses dados depois disso.')) return;
+  try { await supabaseClient.from(HUB_TABLE).delete().eq('id', HUB_ROW_ID); } catch(e){}
   showToast('Dados salvos apagados', 'ok');
   markDirty();
 }
@@ -1126,13 +1130,13 @@ function clearSavedHub(){
 /* ============================================================
    EXPORT (produce a standalone HTML snapshot to share)
    ============================================================ */
-function exportHub(){
+async function exportHub(){
   if(Object.keys(PRODUCTS).length === 0){
     showToast('Nada para exportar ainda — carregue ao menos um roadmap', 'err');
     return;
   }
   // Save current state first so the exported snapshot matches what's on screen
-  saveHub(false);
+  await saveHub(false);
 
   var payload = {
     version: 1,
@@ -1164,22 +1168,25 @@ function exportHub(){
 }
 
 render();
-// Try to restore a previously saved session; if found, re-render with it.
-if(loadHub()){
-  render();
-  updateSaveIndicator();
-  showToast('Torre de Controle restaurada da última sessão salva', 'ok');
-} else if(window.__HUB_SNAPSHOT__ && window.__HUB_SNAPSHOT__.products){
-  // This file was opened as an exported snapshot from someone else — load it directly.
-  PRODUCTS = window.__HUB_SNAPSHOT__.products;
-  PRODUCT_ORDER = window.__HUB_SNAPSHOT__.order || Object.keys(PRODUCTS);
-  paletteIdx = PRODUCT_ORDER.length;
-  render();
-  updateSaveIndicator();
-  showToast('Exibindo versão recebida por arquivo — clique em Salvar para mantê-la neste navegador também', 'ok');
-} else {
-  updateSaveIndicator();
-}
+// Try to restore the shared state from Supabase; if found, re-render with it.
+(async function initHubData(){
+  var restored = await loadHub();
+  if(restored){
+    render();
+    updateSaveIndicator();
+    showToast('Torre de Controle restaurada do Supabase', 'ok');
+  } else if(window.__HUB_SNAPSHOT__ && window.__HUB_SNAPSHOT__.products){
+    // This file was opened as an exported snapshot from someone else — load it directly.
+    PRODUCTS = window.__HUB_SNAPSHOT__.products;
+    PRODUCT_ORDER = window.__HUB_SNAPSHOT__.order || Object.keys(PRODUCTS);
+    paletteIdx = PRODUCT_ORDER.length;
+    render();
+    updateSaveIndicator();
+    showToast('Exibindo versão recebida por arquivo — clique em Salvar para gravar no Supabase também', 'ok');
+  } else {
+    updateSaveIndicator();
+  }
+})();
 
 // Integração com o portal: protege a página e preenche usuário/logout.
 initTopbar('../../index.html');

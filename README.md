@@ -64,7 +64,38 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 ```
 
-6. Para criar os primeiros usuários: **Authentication > Users > Add user** (defina e-mail e senha manualmente).
+6. Ainda no **SQL Editor**, rode este segundo script para criar a tabela do Hub de Produtos (guarda os roadmaps consolidados, compartilhados entre todos que acessam o portal):
+
+```sql
+create table hubs (
+  id text primary key,
+  products jsonb not null default '{}'::jsonb,
+  product_order jsonb not null default '[]'::jsonb,
+  version int not null default 1,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users
+);
+
+alter table hubs enable row level security;
+
+create policy "Usuários logados podem ler o hub"
+on hubs for select
+using ( auth.role() = 'authenticated' );
+
+create policy "Usuários logados podem gravar o hub"
+on hubs for insert
+with check ( auth.role() = 'authenticated' );
+
+create policy "Usuários logados podem atualizar o hub"
+on hubs for update
+using ( auth.role() = 'authenticated' );
+
+create policy "Usuários logados podem apagar o hub"
+on hubs for delete
+using ( auth.role() = 'authenticated' );
+```
+
+7. Para criar os primeiros usuários: **Authentication > Users > Add user** (defina e-mail e senha manualmente).
 
 ## Rodando localmente
 
@@ -86,24 +117,22 @@ npx serve .
   automaticamente do campo `role` da tabela `profiles` em vez de o
   usuário poder se autodeclarar PO.
 
-### Decisão em aberto: `hub.html`
+### Sobre o `hub.html`
 
-O Hub que foi integrado (`modules/torre-de-produtos/hub.html`) é uma
-ferramenta completa de **importação manual**: o usuário arrasta os `.html`
-exportados de cada roadmap (BankManager, Luna, etc.) e ela lê os dados
-embutidos (`var DATA=[...]`) e salva tudo no `localStorage` do navegador
-— ou seja, os dados ficam só naquele computador/navegador, não são
-compartilhados entre usuários do portal.
+O Hub (`modules/torre-de-produtos/hub.html`) é uma ferramenta de
+**importação manual**: o usuário arrasta os `.html` exportados de cada
+roadmap (BankManager, Luna, etc.) e ela lê os dados embutidos
+(`var DATA=[...]`). O upload em si continua sendo local (o navegador lê o
+arquivo), mas o resultado consolidado agora é **salvo na tabela `hubs` do
+Supabase** (botão "Salvar alterações") em vez de `localStorage` — ou seja,
+quando alguém importa e salva, todo mundo que acessa o portal passa a ver
+a mesma versão consolidada.
 
-Isso foi mantido como estava para não quebrar a ferramenta antes de você
-decidir o que faz mais sentido:
-
-1. **Manter como está** — cada pessoa importa os arquivos no seu próprio
-   navegador. Simples, mas cada um vê só o que importou localmente.
-2. **Migrar para o Supabase** — os dados dos roadmaps ficam no banco,
-   compartilhados entre todos que acessam o portal (ex: PO importa uma vez,
-   todo mundo vê). Mais trabalho de implementação, mas é o comportamento
-   normal de um sistema multiusuário de verdade.
+Ponto de atenção: hoje qualquer usuário logado pode salvar/apagar essa
+tabela (a política de RLS libera para todo `authenticated`). Se no futuro
+você quiser restringir quem pode importar/editar o Hub (ex: só PO ou
+admin), dá pra trocar a policy pra checar o campo `role` da tabela
+`profiles`.
 
 Também não decidimos ainda o formato de entrada dos "Produtos" — se vão
 continuar sendo esses arquivos `.html` com `var DATA=[...]` embutido, ou
