@@ -3,8 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Torre de Produtos</title>
+<title>Produtos</title>
 <link rel="stylesheet" href="../../assets/css/style.css">
+<style>
+.prod-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:24px}
+.prod-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--sh)}
+.prod-card h4{font-size:15px;color:var(--text);margin-bottom:6px}
+.prod-card .tag{display:inline-block;font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:20px;margin-bottom:12px}
+.tag.po{background:#dcfce7;color:#059669}
+.tag.view{background:#e0e7ff;color:#4338ca}
+.tag.admin{background:#fef3c7;color:#b45309}
+.prod-card .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.prod-card .actions button, .prod-card .actions a{
+  font-size:11px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer;
+  font-family:inherit;text-decoration:none;display:inline-block;border:1px solid var(--border);
+  background:var(--bg3,#f7f9fc);color:var(--navy)
+}
+.prod-card .actions .primary{background:var(--navy);color:#fff;border-color:transparent}
+.prod-card .actions .danger{background:transparent;color:#dc2626;border-color:#fecaca}
+.new-prod-btn{background:var(--navy);color:#fff;border:none;padding:10px 16px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:20px}
+.pm-overlay{position:fixed;inset:0;background:rgba(15,25,45,.55);z-index:3000;display:flex;align-items:center;justify-content:center}
+.pm-modal{background:#fff;border-radius:14px;width:420px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.pm-modal-hdr{background:var(--navy);color:#fff;padding:14px 18px}
+.pm-modal-hdr h3{font-size:14px;font-weight:800;margin:0}
+.pm-modal-body{padding:18px}
+.pm-modal-body label.pm-label{font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px;margin-top:14px}
+.pm-modal-body select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12.5px;font-family:inherit}
+.pm-checklist{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.pm-check{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);padding:4px 0}
+.pm-actions{display:flex;gap:8px;margin-top:18px}
+.pm-actions button{flex:1;padding:9px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid var(--border);background:#fff;color:var(--muted)}
+.pm-actions button.primary{background:var(--navy);color:#fff;border-color:transparent}
+</style>
 </head>
 <body>
 
@@ -30,30 +60,155 @@
 </div>
 
 <div class="home-wrap">
-  <span class="backlink" onclick="window.location.href='role.html'">← Voltar</span>
-  <h2 id="prodTitle">Produtos</h2>
-  <p id="prodSub">Selecione um produto</p>
+  <span class="backlink" onclick="window.location.href='home.html'">← Voltar</span>
+  <h2 id="pageTitle">Produtos</h2>
+  <p id="pageSub">Carregando seus produtos...</p>
 
-  <!-- A lista real de produtos ainda vai ser definida (dados a caminho). -->
-  <div class="prod-list" id="prodList">
-    <div class="placeholder" style="grid-column:1/-1">Aguardando definição dos produtos e seus dados.</div>
-  </div>
+  <button class="new-prod-btn hide" id="btnNovoProduto" onclick="criarProduto()">+ Novo produto</button>
+  <div class="prod-list" id="prodList"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../assets/js/supabaseClient.js"></script>
 <script src="../../assets/js/auth.js"></script>
 <script>
-initTopbar('../../index.html');
+var IS_ADMIN = false;
+var CURRENT_USER = null;
+var USERS_CACHE = null;
 
-const params = new URLSearchParams(window.location.search);
-const role = params.get('role') === 'edit' ? 'edit' : 'view';
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-document.getElementById('prodTitle').textContent = role === 'view' ? 'Produtos · Stakeholder' : 'Produtos · PO';
-document.getElementById('prodSub').textContent = role === 'view' ? 'Visualização somente leitura' : 'Você pode editar os roadmaps';
+async function getUsersMap(){
+  if(USERS_CACHE) return USERS_CACHE;
+  var { data, error } = await supabaseClient.rpc('list_users');
+  USERS_CACHE = {};
+  if(!error && data) data.forEach(function(u){ USERS_CACHE[u.id] = u.email; });
+  return USERS_CACHE;
+}
 
-// TODO: quando os dados dos produtos chegarem, substituir o placeholder
-// acima por cards gerados a partir deles (ver .prod-item no style.css).
+function slugify(nome){
+  return nome.toString().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'produto';
+}
+
+async function carregarProdutos(){
+  var { data: produtos, error } = await supabaseClient.from('products').select('*').order('created_at');
+  if(error){
+    document.getElementById('pageSub').textContent = 'Erro ao carregar produtos: '+error.message;
+    return;
+  }
+  produtos = produtos || [];
+
+  document.getElementById('btnNovoProduto').classList.toggle('hide', !IS_ADMIN);
+
+  if(IS_ADMIN){
+    document.getElementById('pageTitle').textContent = 'Produtos (administração)';
+    document.getElementById('pageSub').textContent = produtos.length+' produto(s) cadastrado(s) no portal.';
+  } else {
+    document.getElementById('pageTitle').textContent = 'Seus produtos';
+    document.getElementById('pageSub').textContent = produtos.length
+      ? 'Produtos que você tem acesso.'
+      : 'Nenhum produto liberado para você ainda — fale com o administrador do portal.';
+  }
+
+  var html = produtos.map(function(p){
+    var isPo = p.po_user_id === CURRENT_USER.id;
+    var tag = IS_ADMIN
+      ? '<span class="tag admin">Admin — vê tudo</span>'
+      : (isPo ? '<span class="tag po">Você é o PO</span>' : '<span class="tag view">Você acompanha (visualização)</span>');
+    var manageBtn = IS_ADMIN ? '<button onclick="abrirGerenciarAcesso(\''+p.id+'\')">Gerenciar acesso</button>' : '';
+    var delBtn = IS_ADMIN ? '<button class="danger" onclick="excluirProduto(\''+p.id+'\','+JSON.stringify(p.name)+')">Excluir</button>' : '';
+    return '<div class="prod-card">'+
+      tag+
+      '<h4>'+escapeHtml(p.name)+'</h4>'+
+      '<div class="actions">'+
+        '<a class="primary" href="roadmap.html?product='+p.id+'">Abrir roadmap →</a>'+
+        manageBtn+delBtn+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  document.getElementById('prodList').innerHTML = html || '<div class="placeholder" style="grid-column:1/-1">Nenhum produto por aqui ainda.</div>';
+}
+
+async function criarProduto(){
+  var nome = prompt('Nome do novo produto:');
+  if(!nome || !nome.trim()) return;
+  nome = nome.trim();
+  var slug = slugify(nome)+'-'+Date.now().toString(36).slice(-4);
+  var { data, error } = await supabaseClient.from('products').insert({name:nome, slug:slug, config:{}}).select().single();
+  if(error){ alert('Erro ao criar produto: '+error.message); return; }
+  await carregarProdutos();
+  abrirGerenciarAcesso(data.id);
+}
+
+async function excluirProduto(id, nome){
+  if(!confirm('Excluir o produto "'+nome+'" definitivamente?\n\nIsso apaga o produto, todos os seus épicos e os acessos configurados. Não pode ser desfeito.')) return;
+  var { error } = await supabaseClient.from('products').delete().eq('id', id);
+  if(error){ alert('Erro ao excluir: '+error.message); return; }
+  await carregarProdutos();
+}
+
+async function abrirGerenciarAcesso(productId){
+  var { data: produto } = await supabaseClient.from('products').select('*').eq('id', productId).single();
+  var usersMap = await getUsersMap();
+  var userIds = Object.keys(usersMap);
+  var { data: stakeholderRows } = await supabaseClient.from('product_stakeholders').select('user_id').eq('product_id', productId);
+  var currentStakeholders = {};
+  (stakeholderRows||[]).forEach(function(r){ currentStakeholders[r.user_id]=true; });
+
+  var overlay = document.createElement('div');
+  overlay.className = 'pm-overlay';
+  overlay.innerHTML =
+    '<div class="pm-modal">'+
+      '<div class="pm-modal-hdr"><h3>Gerenciar acesso — '+escapeHtml(produto.name)+'</h3></div>'+
+      '<div class="pm-modal-body">'+
+        '<label class="pm-label">PO responsável por este produto</label>'+
+        '<select id="pm-po">'+
+          '<option value="">— nenhum definido —</option>'+
+          userIds.map(function(id){ return '<option value="'+id+'" '+(produto.po_user_id===id?'selected':'')+'>'+escapeHtml(usersMap[id])+'</option>'; }).join('')+
+        '</select>'+
+        '<label class="pm-label">Stakeholders com acesso de visualização</label>'+
+        '<div class="pm-checklist">'+
+          (userIds.length ? userIds.map(function(id){
+            return '<label class="pm-check"><input type="checkbox" value="'+id+'" '+(currentStakeholders[id]?'checked':'')+'> '+escapeHtml(usersMap[id])+'</label>';
+          }).join('') : '<span style="color:var(--dim);font-size:11.5px">Nenhum usuário cadastrado ainda.</span>')+
+        '</div>'+
+        '<div class="pm-actions">'+
+          '<button id="pm-cancel">Cancelar</button>'+
+          '<button class="primary" id="pm-save">Salvar</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  overlay.querySelector('#pm-cancel').onclick = function(){ overlay.remove(); };
+  overlay.querySelector('#pm-save').onclick = async function(){
+    var poId = overlay.querySelector('#pm-po').value || null;
+    var selecionados = Array.prototype.slice.call(overlay.querySelectorAll('.pm-check input:checked')).map(function(i){ return i.value; });
+    var { error: err1 } = await supabaseClient.from('products').update({po_user_id: poId}).eq('id', productId);
+    var { error: err2 } = await supabaseClient.from('product_stakeholders').delete().eq('product_id', productId);
+    var err3 = null;
+    if(selecionados.length){
+      var res3 = await supabaseClient.from('product_stakeholders').insert(selecionados.map(function(uid){ return {product_id:productId, user_id:uid}; }));
+      err3 = res3.error;
+    }
+    if(err1||err2||err3){ alert('Erro ao salvar acesso: '+((err1||err2||err3).message)); return; }
+    overlay.remove();
+    await carregarProdutos();
+  };
+}
+
+(async function init(){
+  var ctx = await initTopbar('../../index.html');
+  if(!ctx) return;
+  CURRENT_USER = ctx.user;
+  IS_ADMIN = !!(ctx.perfil && ctx.perfil.role==='admin');
+  await carregarProdutos();
+})();
 </script>
 </body>
 </html>
