@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administração de usuários</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+.tbl-users{width:100%;border-collapse:collapse;background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:28px}
+.tbl-users th{text-align:left;font-size:9.5px;color:var(--dim);text-transform:uppercase;padding:10px 14px;background:var(--bg)}
+.tbl-users td{padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border)}
+.role-badge{padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
+.role-badge.admin{background:#fef3c7;color:#b45309}
+.role-badge.po{background:#dcfce7;color:#059669}
+.role-badge.stakeholder{background:#e0e7ff;color:#4338ca}
+.new-admin-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:380px;box-shadow:var(--sh)}
+.new-admin-card h3{font-size:14px;color:var(--navy);margin-bottom:4px}
+.new-admin-card p{font-size:11.5px;color:var(--muted);margin-bottom:16px}
+</style>
+</head>
+<body>
+
+<div class="header-wrap"><div class="header-logo-row">
+  <div class="logo">
+    <svg class="logo-svg" width="26" height="26" viewBox="0 0 100 100">
+      <polygon points="50,8 68,22 68,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,8 32,22 32,38 50,30" fill="#1a3a5c"/>
+      <polygon points="50,32 76,48 76,62 50,54" fill="#dc2626"/>
+      <polygon points="50,32 24,48 24,62 50,54" fill="#dc2626"/>
+      <polygon points="50,56 84,74 84,94 50,84" fill="#1a3a5c"/>
+      <polygon points="50,56 16,74 16,94 50,84" fill="#1a3a5c"/>
+    </svg>
+    <div class="logo-tx"><b>Portal de Sistemas</b><span>Acesso unificado</span></div>
+  </div>
+</div></div>
+<div class="topbar">
+  <div class="user">
+    <div class="avatar" id="topbarAvatar">--</div>
+    <span id="topbarName">Carregando...</span>
+    <span class="logout-btn" onclick="handleLogout()">Sair</span>
+  </div>
+</div>
+
+<div class="home-wrap">
+  <span class="backlink" onclick="window.location.href='dashboard.html'">← Voltar</span>
+  <h2>Administração de usuários</h2>
+  <p id="pageSub">Carregando...</p>
+
+  <div id="semAcesso" class="hide">
+    <p style="color:var(--muted);font-size:13px">Esta tela é só para administradores.</p>
+  </div>
+
+  <div id="conteudo" class="hide">
+    <table class="tbl-users" id="tblUsers">
+      <thead><tr><th>E-mail interno</th><th>Perfil</th></tr></thead>
+      <tbody id="tblUsersBody"></tbody>
+    </table>
+
+    <div class="new-admin-card">
+      <h3>Criar novo administrador</h3>
+      <p>Por enquanto, só usuário e senha diretos — depois vamos exigir que a pessoa defina a própria senha no primeiro acesso.</p>
+      <form id="novoAdminForm">
+        <div class="field"><label>Usuário</label><input type="text" id="na-usuario" placeholder="novo.usuario" required></div>
+        <div class="field"><label>Senha</label><input type="password" id="na-senha" placeholder="••••••••" required></div>
+        <div class="field"><label>Confirmar senha</label><input type="password" id="na-senha2" placeholder="••••••••" required></div>
+        <p class="error-msg hide" id="naError"></p>
+        <button class="btn-login" type="submit" id="btnNovoAdmin">Criar administrador</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabaseClient.js"></script>
+<script src="assets/js/auth.js"></script>
+<script>
+async function carregarUsuarios(){
+  var { data, error } = await supabaseClient.rpc('list_users');
+  var tbody = document.getElementById('tblUsersBody');
+  if(error){
+    tbody.innerHTML = '<tr><td colspan="2">Erro ao carregar: '+error.message+'</td></tr>';
+    return;
+  }
+  tbody.innerHTML = (data||[]).map(function(u){
+    var role = u.role || 'stakeholder';
+    return '<tr><td>'+u.email+'</td><td><span class="role-badge '+role+'">'+role+'</span></td></tr>';
+  }).join('');
+}
+
+document.getElementById('novoAdminForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var usuario = document.getElementById('na-usuario').value.trim();
+  var senha = document.getElementById('na-senha').value;
+  var senha2 = document.getElementById('na-senha2').value;
+  var erro = document.getElementById('naError');
+  var btn = document.getElementById('btnNovoAdmin');
+  erro.classList.add('hide');
+
+  if(!usuario){ erro.textContent='Informe um usuário.'; erro.classList.remove('hide'); return; }
+  if(senha.length < 6){ erro.textContent='A senha precisa ter pelo menos 6 caracteres.'; erro.classList.remove('hide'); return; }
+  if(senha !== senha2){ erro.textContent='As senhas não conferem.'; erro.classList.remove('hide'); return; }
+
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try {
+    // signUp() troca a sessão ativa do navegador pro usuário recém-criado —
+    // por isso guardamos a sessão do admin atual antes, e restauramos depois,
+    // pra quem está criando o novo admin continuar logado como ele mesmo.
+    var { data: { session: sessaoAtual } } = await supabaseClient.auth.getSession();
+
+    var { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({
+      email: usuarioParaEmail(usuario),
+      password: senha
+    });
+    if(signUpError) throw signUpError;
+
+    if(sessaoAtual){
+      await supabaseClient.auth.setSession({
+        access_token: sessaoAtual.access_token,
+        refresh_token: sessaoAtual.refresh_token
+      });
+    }
+
+    var { error: updError } = await supabaseClient
+      .from('profiles')
+      .update({ role: 'admin', nome: usuario })
+      .eq('id', signUpData.user.id);
+    if(updError) throw updError;
+
+    document.getElementById('novoAdminForm').reset();
+    await carregarUsuarios();
+  } catch(err){
+    erro.textContent = 'Erro: '+err.message;
+    erro.classList.remove('hide');
+  }
+  btn.disabled = false; btn.textContent = 'Criar administrador';
+});
+
+(async function init(){
+  var ctx = await initTopbar('index.html');
+  if(!ctx) return;
+  var isAdmin = ctx.perfil && ctx.perfil.role === 'admin';
+  document.getElementById('pageSub').textContent = 'Usuários cadastrados no portal e criação de novos administradores.';
+  if(!isAdmin){
+    document.getElementById('semAcesso').classList.remove('hide');
+    return;
+  }
+  document.getElementById('conteudo').classList.remove('hide');
+  await carregarUsuarios();
+})();
+</script>
+</body>
+</html>

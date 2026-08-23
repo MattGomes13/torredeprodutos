@@ -9,7 +9,9 @@ sistemas em HTML que antes eram independentes. Autenticação via
 ```
 portal-sistemas/
 ├── index.html               → tela de login (global, vale para todos os sistemas)
-├── dashboard.html            → lista os sistemas que o usuário pode acessar
+├── setup-admin.html         → bootstrap: cria o 1º administrador do portal (só funciona 1 vez)
+├── dashboard.html           → lista os sistemas que o usuário pode acessar
+├── admin-usuarios.html      → (admin) lista usuários e cria novos administradores
 ├── assets/
 │   ├── css/style.css         → estilo visual compartilhado por todo o portal
 │   └── js/
@@ -30,7 +32,7 @@ Cada novo sistema que for integrado vira uma nova pasta dentro de
 ## Configuração necessária (fazer 1 vez)
 
 1. Crie uma conta e um projeto gratuito em https://supabase.com
-2. Em **Authentication > Providers**, deixe o login por **Email** habilitado (já vem habilitado por padrão).
+2. Em **Authentication > Providers > Email**, deixe o login por e-mail habilitado, e **desligue "Confirm email"**. Isso é importante: o portal usa **usuário** (não e-mail) pra login — por baixo dos panos isso vira um e-mail interno tipo `seu.usuario@portal.local`, que não existe de verdade e não recebe e-mail de confirmação nenhum. Com "Confirm email" ligado, nenhuma conta criada pelo portal conseguiria entrar.
 3. Em **Project Settings > API**, copie a **Project URL** e a **anon public key**.
 4. Cole os dois valores em [assets/js/supabaseClient.js](assets/js/supabaseClient.js).
 5. Em **SQL Editor**, rode os scripts abaixo, **nesta ordem** (cada um depende do anterior).
@@ -70,12 +72,53 @@ create or replace function is_admin()
 returns boolean language sql stable as $$
   select exists(select 1 from profiles where id = auth.uid() and role = 'admin');
 $$;
-```
 
-> ⚠️ Depois de rodar isso, **defina você mesmo como admin**: crie seu usuário em
-> Authentication > Users > Add user, depois rode
-> `update profiles set role='admin' where id='COLE_AQUI_O_UUID_DO_SEU_USUARIO';`
-> (o UUID aparece na lista de usuários do Supabase).
+-- admin pode editar o perfil de qualquer usuário (definir role, nome etc.)
+create policy "admin atualiza qualquer perfil"
+on profiles for update
+using ( is_admin() )
+with check ( is_admin() );
+
+-- quantos admins já existem — usado pela tela de bootstrap (setup-admin.html)
+-- pra saber se ainda pode criar o primeiro. Roda mesmo sem ninguém logado.
+create or replace function admin_count()
+returns int language sql security definer as $$
+  select count(*)::int from profiles where role = 'admin';
+$$;
+grant execute on function admin_count() to anon, authenticated;
+
+-- deixa o USUÁRIO ATUAL virar o primeiro admin do portal — só funciona
+-- se ainda não existir nenhum admin (senão, dá erro). É assim que a tela
+-- setup-admin.html cria o admin inicial, sem precisar de service_role key.
+create or replace function claim_first_admin(p_nome text)
+returns void language plpgsql security definer as $$
+begin
+  if (select count(*) from profiles where role = 'admin') > 0 then
+    raise exception 'já existe um administrador — peça pra ele criar seu acesso';
+  end if;
+  update profiles set role = 'admin', nome = coalesce(p_nome, nome) where id = auth.uid();
+end;
+$$;
+grant execute on function claim_first_admin(text) to authenticated;
+
+-- lista usuários (id + e-mail interno + perfil) — só admin consegue chamar.
+-- usada em admin-usuarios.html e no "gerenciar acesso" da Torre de Produtos.
+drop function if exists list_users();
+create or replace function list_users()
+returns table(id uuid, email text, role text) language plpgsql security definer as $$
+begin
+  if not is_admin() then
+    raise exception 'apenas administradores podem listar usuários';
+  end if;
+  return query
+    select au.id, au.email::text, coalesce(p.role, 'stakeholder')
+    from auth.users au
+    left join profiles p on p.id = au.id
+    order by au.email;
+end;
+$$;
+grant execute on function list_users() to authenticated;
+```
 
 ### 5.2 Hub de Produtos (visão consolidada)
 
@@ -136,18 +179,8 @@ create table epics (
   updated_at timestamptz not null default now()
 );
 
--- lista usuários cadastrados (id + e-mail) — só para o admin usar nas telas
--- de "gerenciar acesso" (escolher PO / stakeholders por nome de e-mail)
-create or replace function list_users()
-returns table(id uuid, email text) language plpgsql security definer as $$
-begin
-  if not is_admin() then
-    raise exception 'apenas administradores podem listar usuários';
-  end if;
-  return query select au.id, au.email::text from auth.users au order by au.email;
-end;
-$$;
-grant execute on function list_users() to authenticated;
+-- (a função list_users() já foi criada lá no script 5.1 — reaproveitada aqui
+-- pra escolher PO/stakeholders por e-mail na tela "Gerenciar acesso")
 
 -- substitui de uma vez todos os épicos de um produto (usado ao salvar/importar
 -- o roadmap) — evita fazer isso em 2 chamadas separadas (delete + insert) do
@@ -224,7 +257,25 @@ with check (
 );
 ```
 
-6. Para criar os primeiros usuários: **Authentication > Users > Add user** (defina e-mail e senha manualmente). Depois, como admin, use a tela **Produtos** do portal para criar produtos e decidir quem é PO de cada um / quem pode visualizar como stakeholder.
+6. Com os 3 scripts acima já rodados, abra `setup-admin.html` no navegador e crie o **primeiro administrador** por lá (usuário + senha direto na tela) — ela só funciona antes de existir qualquer admin no portal.
+
+   > ⚠️ **Atenção de segurança**: `setup-admin.html` fica acessível pra
+   > qualquer visitante (sem login) até o primeiro admin ser criado — é
+   > assim que ela consegue existir sem precisar de credenciais especiais.
+   > Faça esse passo **antes** de deixar o site publicamente acessível
+   > (ex: antes de publicar no GitHub Pages), ou faça isso localmente
+   > primeiro. Depois que o primeiro admin existe, a função
+   > `claim_first_admin` se recusa a rodar de novo — a tela para de
+   > funcionar sozinha.
+
+7. Depois disso, como admin, use:
+   - **Administração** (card que aparece no dashboard só pra quem já é admin) → criar outros administradores (usuário + senha direto, mesma lógica do bootstrap).
+   - **Produtos** → criar produtos e decidir quem é o PO de cada um / quem pode visualizar como stakeholder.
+
+   Usuários do tipo PO/Stakeholder, por enquanto, só podem ser criados
+   rodando SQL direto no Supabase (criar o usuário em Authentication >
+   Users, e ajustar `profiles.role` se quiser) — uma tela pra isso fica
+   pra etapa de perfis e permissões.
 
 ## Rodando localmente
 
@@ -252,5 +303,8 @@ python -m http.server 8000
 
 ## Pendências / próximos passos combinados
 
-- Fica para uma etapa própria (como combinado): a definição fina de **perfis e permissões** — por exemplo, uma tela para o admin trocar o `role` de um usuário (hoje só dá pra fazer isso rodando SQL direto no Supabase), e revisar se cada ação sensível do portal está checando o perfil certo.
-- O Hub (`hub.html`) hoje aceita salvar/apagar de **qualquer usuário logado** (não só admin/PO) — mencionar se quiser restringir isso também na etapa de permissões.
+Fica para uma etapa própria (como combinado): a definição fina de **perfis e permissões**. Por enquanto só o perfil **admin** tem telas prontas (bootstrap + criar outros admins); o esquema já suporta PO e Stakeholder (tabela `profiles.role`, `products.po_user_id`, `product_stakeholders`), mas ainda faltam:
+- Uma tela para criar usuários PO/Stakeholder direto do portal (hoje precisa rodar SQL/usar o painel do Supabase pra criar a conta e depois pode usar "Gerenciar acesso" em Produtos pra vincular a um produto).
+- Uma tela para o admin trocar o `role` de um usuário já existente (hoje só dá pra fazer isso rodando SQL direto no Supabase).
+- Exigir que o usuário defina/troque a própria senha no primeiro acesso (por enquanto, quem cria a conta já define a senha diretamente).
+- O Hub (`hub.html`) hoje aceita salvar/apagar de **qualquer usuário logado** (não só admin/PO) — revisar se isso deve virar restrito também.

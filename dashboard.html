@@ -40,6 +40,12 @@
       <div class="arrow">Acessar →</div>
     </div>
     <!-- Próximos sistemas entram aqui como novos .card -->
+    <div class="card hide" id="cardAdmin" onclick="window.location.href='admin-usuarios.html'">
+      <div class="card-ic">⚙</div>
+      <h3>Administração</h3>
+      <p>Gerenciar usuários e criar novos administradores do portal.</p>
+      <div class="arrow">Acessar →</div>
+    </div>
   </div>
 </div>
 
@@ -47,7 +53,13 @@
 <script src="assets/js/supabaseClient.js"></script>
 <script src="assets/js/auth.js"></script>
 <script>
-initTopbar('index.html');
+(async function(){
+  var ctx = await initTopbar('index.html');
+  if(!ctx) return;
+  if(ctx.perfil && ctx.perfil.role === 'admin'){
+    document.getElementById('cardAdmin').classList.remove('hide');
+  }
+})();
 </script>
 </body>
 </html>

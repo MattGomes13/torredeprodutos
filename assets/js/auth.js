@@ -1,8 +1,18 @@
 // Funções centrais de autenticação e perfil, usadas por todas as
 // páginas do portal (login, dashboard e cada módulo/sistema).
 
-async function fazerLogin(email, senha) {
-  return await supabaseClient.auth.signInWithPassword({ email, password: senha });
+// O portal usa "usuário" (não e-mail) como identificação de login — mas o
+// Supabase Auth só sabe autenticar por e-mail. Pra reconciliar os dois sem
+// precisar de um backend próprio, todo usuário criado pelo portal ganha um
+// e-mail interno "usuario@portal.local" por baixo dos panos. Se alguém um
+// dia digitar um e-mail de verdade (com "@"), usamos ele direto.
+function usuarioParaEmail(usuario) {
+  var u = (usuario || '').trim().toLowerCase();
+  return u.indexOf('@') > -1 ? u : u + '@portal.local';
+}
+
+async function fazerLogin(usuario, senha) {
+  return await supabaseClient.auth.signInWithPassword({ email: usuarioParaEmail(usuario), password: senha });
 }
 
 async function fazerLogout() {
