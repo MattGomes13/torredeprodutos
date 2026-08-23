@@ -301,6 +301,57 @@ python -m http.server 8000
 - **`roadmap.html?product=<id>`** → o roadmap completo de 1 produto (o mesmo roadmap "Torre de Produtos" que você já usava localmente: Gantt, visão estratégica/financeira, lista, filtros, exportar Excel/PPT, gestão de layers, white-label, etc.), agora lendo/gravando os épicos na tabela `epics` do Supabase em vez de `localStorage`. PO e admin podem editar; Stakeholder só visualiza (os botões de criar/editar/excluir/importar ficam ocultos, e o Supabase também bloqueia essas ações no banco por segurança, mesmo que alguém tente burlar a tela).
   - Botão **"⬆ Importar"**: sobe um `.html` de roadmap já exportado (como os que você já tinha rodando localmente) e carrega todos os épicos, tipos e layers dele para dentro do produto atual no Supabase — é assim que cada PO migra os dados que já tinha, sem precisar redigitar nada.
 
+## Publicar no GitHub (e deixar online)
+
+O projeto já é um repositório git local (`git log` mostra o histórico de
+commits). Faltam só 2 coisas: mandar esse código pro GitHub, e (opcional)
+ativar o GitHub Pages pra virar um link acessível.
+
+### 1. Criar o repositório vazio no GitHub
+
+1. Acesse https://github.com/new
+2. Dê um nome (ex: `portal-sistemas`)
+3. Deixe **sem** marcar "Add a README" / ".gitignore" / license — o repositório
+   precisa nascer **vazio**, porque o projeto local já tem esses arquivos.
+4. Escolha **Público** ou **Privado**:
+   - Público → dá pra usar o GitHub Pages de graça (é o mais simples).
+   - Privado → também dá pra usar Pages, mas só nos planos pagos do GitHub
+     (Pro/Team). Repositório privado no plano free não publica Pages.
+5. Clique em **Create repository**. Na próxima tela, copie a URL que aparece
+   em "…or push an existing repository from the command line" (algo como
+   `https://github.com/SEU-USUARIO/portal-sistemas.git`).
+
+### 2. Conectar o projeto local e enviar
+
+Rode isso dentro da pasta `portal-sistemas` (troque a URL pela sua):
+
+```bash
+git remote add origin https://github.com/SEU-USUARIO/portal-sistemas.git
+git push -u origin master
+```
+
+Vai pedir login do GitHub na primeira vez (usuário + um **token de acesso
+pessoal**, não a senha da conta — o GitHub explica como gerar um token se
+pedir, ou abre uma janela de login se você tiver o Git Credential Manager
+instalado, que é o padrão no Windows).
+
+### 3. (Opcional) Ativar o GitHub Pages pra ter um link ao vivo
+
+1. No repositório no GitHub, vá em **Settings > Pages**.
+2. Em "Source", escolha a branch `master` e a pasta `/ (root)`.
+3. Salve. Em alguns minutos o site fica em
+   `https://SEU-USUARIO.github.io/portal-sistemas/`.
+
+O projeto só usa caminhos relativos, então funciona normalmente nesse
+endereço com subpasta (não precisa de domínio próprio nem configuração
+extra).
+
+> ⚠️ Antes de ativar o Pages (ou seja, antes do site ficar público),
+> garanta que você já rodou o SQL do Supabase e já criou o primeiro admin
+> pelo `setup-admin.html` **localmente** — veja o aviso de segurança sobre
+> essa tela lá em cima. Depois de criado o primeiro admin, pode publicar
+> sem problema.
+
 ## Pendências / próximos passos combinados
 
 Fica para uma etapa própria (como combinado): a definição fina de **perfis e permissões**. Por enquanto só o perfil **admin** tem telas prontas (bootstrap + criar outros admins); o esquema já suporta PO e Stakeholder (tabela `profiles.role`, `products.po_user_id`, `product_stakeholders`), mas ainda faltam:
