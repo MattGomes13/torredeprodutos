@@ -1,54 +1,1188 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Torre de Produtos</title>
-<link rel="stylesheet" href="../../assets/css/style.css">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Torre de Controle · Roadmaps 2026</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f4f8;--bg2:#fff;--bg3:#f7f9fc;--bg4:#e8eef5;
+  --border:#d1dce8;--border2:#b8c8d9;
+  --text:#1e293b;--muted:#64748b;--dim:#94a3b8;
+  --navy:#1a3a5c;--navy2:#142e4a;
+  --cyan:#2563eb;--amber:#d97706;--green:#059669;--red:#dc2626;--violet:#7c3aed;
+  --sh:0 1px 3px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.04);
+  --sh-lg:0 8px 32px rgba(0,0,0,.14);
+  --mono:'Courier New',ui-monospace,monospace;
+  --sans:'Segoe UI',system-ui,sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden}
+
+/* ============ SCAFFOLD ============ */
+.shell{max-width:1400px;margin:0 auto;padding:0 28px 80px}
+.topbar{background:linear-gradient(135deg,var(--navy) 0%,#1e4569 50%,var(--navy) 100%);margin:0 -1000px;padding:26px 1000px 22px;box-shadow:0 2px 14px rgba(0,0,0,.15)}
+.topbar-in{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;max-width:1400px;margin:0 auto}
+.brand{display:flex;flex-direction:column;gap:6px}
+.hub-backlink{font-family:var(--sans);font-size:11px;color:rgba(255,255,255,.6);cursor:pointer;margin-bottom:2px}
+.hub-backlink:hover{color:#fff}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:3px;color:#93c5fd;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+h1{font-size:26px;font-weight:800;letter-spacing:-.5px;color:#fff}
+.sub{font-size:12px;color:rgba(255,255,255,.55);max-width:520px;line-height:1.5;margin-top:2px}
+.clock{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.4);text-align:right}
+.topbar-actions{display:flex;align-items:center;gap:10px}
+.tb-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:11.5px;font-weight:700;padding:8px 14px;border-radius:9px;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+.tb-btn:hover{background:rgba(255,255,255,.18)}
+.tb-btn.dirty{background:#d97706;border-color:#d97706;animation:dirtypulse 1.8s ease-in-out infinite}
+@keyframes dirtypulse{0%,100%{box-shadow:0 0 0 0 rgba(217,119,6,.5)}50%{box-shadow:0 0 0 5px rgba(217,119,6,0)}}
+.tb-btn-outline{background:transparent}
+.tb-btn-outline:hover{background:rgba(255,255,255,.12)}
+.clock b{color:rgba(255,255,255,.75);display:block;font-size:13px;margin-bottom:2px}
+.bodypad{padding-top:28px}
+
+/* ============ USER / LOGOUT (integração com o portal) ============ */
+.hub-user{display:flex;align-items:center;gap:8px;color:#fff;font-size:12px;padding-left:6px;border-left:1px solid rgba(255,255,255,.18)}
+.hub-avatar{width:26px;height:26px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10.5px;flex-shrink:0}
+.hub-logout{cursor:pointer;opacity:.8;text-decoration:underline;font-size:11px;white-space:nowrap}
+.hub-logout:hover{opacity:1}
+
+/* ============ DROPZONE ============ */
+.dz{border:1.5px dashed var(--border2);border-radius:16px;padding:22px 22px;display:flex;align-items:center;gap:18px;background:var(--bg2);transition:.2s;cursor:pointer;margin-bottom:28px;box-shadow:var(--sh)}
+.dz:hover,.dz.drag{border-color:var(--navy);background:#eef4ff}
+.dz-icon{width:44px;height:44px;border-radius:12px;background:#eef4ff;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;border:1px solid #cfe0fb;color:var(--navy)}
+.dz-txt b{font-size:13.5px;color:var(--text);display:block;margin-bottom:3px}
+.dz-txt span{font-size:11.5px;color:var(--muted)}
+.dz input{display:none}
+
+/* ============ PRODUCT RAIL ============ */
+.rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:32px}
+.pcard{position:relative;border-radius:14px;padding:16px 16px 14px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;transition:.18s;overflow:hidden;box-shadow:var(--sh)}
+.pcard::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent,var(--dim));opacity:.9}
+.pcard:hover{border-color:var(--border2);transform:translateY(-1px);box-shadow:var(--sh-lg)}
+.pcard.off{opacity:.5}
+.pcard.empty{border-style:dashed;cursor:default;box-shadow:none}
+.pcard.empty:hover{transform:none}
+.pcard.dragging{opacity:.35}
+.pcard.drag-over{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy) inset}
+.pc-drag{position:absolute;top:12px;left:12px;font-size:11px;color:var(--dim);opacity:0;transition:.15s;cursor:grab;letter-spacing:-2px;line-height:1}
+.pcard:hover .pc-drag{opacity:.7}
+.pc-drag:active{cursor:grabbing}
+.pc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-left:14px}
+.pc-name{font-size:13px;font-weight:800;color:var(--text);letter-spacing:-.2px;display:flex;align-items:center;gap:5px}
+.pc-name-edit{opacity:0;font-size:10px;color:var(--dim);transition:.15s}
+.pcard:hover .pc-name-edit{opacity:1}
+.pc-sub{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.pc-toggle{width:30px;height:17px;border-radius:10px;background:var(--bg4);position:relative;flex-shrink:0;transition:.15s;border:1px solid var(--border2)}
+.pc-toggle::after{content:"";position:absolute;width:11px;height:11px;border-radius:50%;background:#fff;top:2px;left:2px;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.pcard.off .pc-toggle::after{background:var(--dim)}
+.pcard:not(.off) .pc-toggle{background:var(--accent,var(--navy));border-color:transparent}
+.pcard:not(.off) .pc-toggle::after{left:15px}
+.pc-count{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--text);line-height:1;padding-left:14px}
+.pc-count-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;padding-left:14px}
+.pc-bar{display:flex;height:5px;border-radius:3px;overflow:hidden;margin-top:12px;background:var(--bg4)}
+.pc-bar div{height:100%}
+.pc-empty-txt{font-size:11px;color:var(--dim);line-height:1.5}
+.pc-empty-txt b{color:var(--muted)}
+.pc-x{position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:6px;background:var(--bg4);border:1px solid var(--border);color:var(--muted);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5;opacity:.7;transition:.15s}
+.pcard:hover .pc-x{opacity:1}
+.pc-x:hover{background:var(--red);color:#fff;border-color:var(--red);transform:scale(1.08)}
+.pc-name-input{font-size:13px;font-weight:800;color:var(--text);border:1.5px solid var(--navy);border-radius:6px;padding:2px 6px;width:100%;font-family:inherit;background:#fff}
+.pc-view-btn{margin-top:11px;width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 0;font-size:10.5px;font-weight:700;color:var(--navy);cursor:pointer;font-family:inherit;transition:.15s}
+.pc-view-btn:hover{background:var(--accent,var(--navy));color:#fff;border-color:transparent}
+.pc-po{margin-top:10px;padding-left:14px;font-size:11px;color:var(--text);font-weight:600;display:flex;align-items:center;gap:5px;cursor:pointer;transition:.15s;border-radius:5px;padding-top:2px;padding-bottom:2px}
+.pc-po:hover{color:var(--navy)}
+.pc-po-ic{font-size:10px;opacity:.6}
+.pc-po-empty{color:var(--dim);font-weight:500;font-style:italic}
+.pc-po-input{font-size:11px;font-weight:600;color:var(--text);border:1.5px solid var(--navy);border-radius:6px;padding:2px 6px;width:calc(100% - 14px);margin-left:14px;font-family:inherit;background:#fff}
+
+/* ============ TABS ============ */
+.tabs{display:flex;gap:6px;margin-bottom:24px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:0}
+.tab{display:flex;align-items:center;gap:7px;padding:9px 15px;border:none;background:transparent;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;border-bottom:2.5px solid transparent;transition:.15s;margin-bottom:-1px}
+.tab:hover{color:var(--navy)}
+.tab.on{color:var(--tc,var(--navy));border-bottom-color:var(--tc,var(--navy))}
+.tab-ic{color:#2563eb}
+.tab-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+
+/* ============ SECTION HEADERS ============ */
+.sec-hdr{display:flex;align-items:baseline;gap:12px;margin:8px 0 16px}
+.sec-hdr h2{font-size:16px;color:var(--navy);font-weight:800}
+.sec-hdr .cnt{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.sec-line{flex:1;height:1px;background:var(--border)}
+
+/* ============ TOTALIZERS ============ */
+.totals{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:32px}
+.tot{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden;box-shadow:var(--sh)}
+.tot::after{content:"";position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--c,var(--navy))}
+.tot-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.tot-val{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--text);line-height:1}
+.tot-sub{font-size:9.5px;color:var(--muted);margin-top:4px}
+
+/* ============ BREAKDOWN GRID ============ */
+.bgrid{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-bottom:32px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--sh)}
+.panel h3{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:16px;font-weight:700}
+.stackrow{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.stackrow .nm{width:150px;font-size:11.5px;color:var(--text);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.stackbar{flex:1;height:16px;border-radius:4px;background:var(--bg4);display:flex;overflow:hidden}
+.stackbar div{height:100%;transition:.3s}
+.stackrow .tot-n{font-family:var(--mono);font-size:10.5px;color:var(--dim);width:30px;text-align:right;flex-shrink:0}
+
+.donutwrap{display:flex;align-items:center;gap:20px}
+.legend{display:flex;flex-direction:column;gap:8px;flex:1}
+.leg-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.leg-item b{color:var(--text);margin-left:auto;font-family:var(--mono)}
+
+/* ============ VALUE BREAKDOWN (Estratégica) ============ */
+.valgrid-hdr{display:grid;grid-template-columns:170px 1fr 130px 55px;gap:12px;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;padding-bottom:10px;margin-bottom:8px;border-bottom:1px solid var(--border)}
+.valrow{display:grid;grid-template-columns:170px 1fr 130px 55px;gap:12px;align-items:center;padding:7px 0}
+.valrow .nm{font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.valbar-track{height:10px;border-radius:5px;background:var(--bg4);overflow:hidden}
+.valbar-fill{height:100%;border-radius:5px;transition:.4s}
+.valamt{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);text-align:right}
+.valpct{font-family:var(--mono);font-size:10.5px;color:var(--dim);text-align:right}
+.valrow-total{border-top:1.5px solid var(--border);margin-top:6px;padding-top:12px}
+.valrow-total .nm{color:var(--navy);font-weight:800;letter-spacing:.3px;font-size:11px}
+.valrow-total .valamt{font-size:14px;color:var(--navy)}
+
+.btn-danger-ghost{background:transparent;border:1.5px solid #fecaca;color:var(--red);font-size:10.5px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;transition:.15s}
+.btn-danger-ghost:hover{background:var(--red);color:#fff;border-color:var(--red)}
+
+/* ============ TABLE ============ */
+.tbl-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px;box-shadow:var(--sh)}
+.tbl-hdr{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;background:var(--bg3)}
+.tbl-hdr h3{font-size:13px;color:var(--navy);font-weight:800;margin-right:auto}
+.search{background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:6px 11px;font-size:11.5px;color:var(--text);font-family:inherit;width:200px}
+.search::placeholder{color:var(--dim)}
+.sel{background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:6px 9px;font-size:11px;color:var(--text);font-family:inherit;cursor:pointer}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--bg3);white-space:nowrap;cursor:pointer;user-select:none}
+thead th:hover{color:var(--navy)}
+tbody td{padding:10px 14px;font-size:11.5px;border-bottom:1px solid var(--bg4);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+tbody tr:hover{background:#f8fafc}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
+.badge::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.prod-tag{font-family:var(--mono);font-size:9.5px;padding:2px 7px;border-radius:5px;font-weight:700}
+.prog-mini{display:flex;align-items:center;gap:6px}
+.prog-mini .track{width:44px;height:4px;border-radius:3px;background:var(--bg4)}
+.prog-mini .fill{height:100%;border-radius:3px}
+
+/* ============ ACOMPANHAMENTO ============ */
+.watch-sec{margin-bottom:30px}
+.watch-hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.watch-ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.watch-title{font-size:14px;font-weight:800;color:var(--text)}
+.watch-title small{display:block;font-size:10.5px;font-weight:600;color:var(--muted);margin-top:1px}
+.watch-cnt{margin-left:auto;font-family:var(--mono);font-size:20px;font-weight:800}
+.watch-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.wcard{background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--wc,var(--dim));border-radius:12px;padding:14px 16px;box-shadow:var(--sh);position:relative}
+.wcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
+.wcard-prod{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:5px;font-weight:700;flex-shrink:0}
+.wcard-badge{font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0}
+.wcard-title{font-size:12.5px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:8px}
+.wcard-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:10.5px;color:var(--muted)}
+.wcard-meta b{color:var(--text)}
+.wcard-meta .m-red{color:var(--red);font-weight:700}
+.watch-empty{background:var(--bg3);border:1px dashed var(--border2);border-radius:12px;padding:22px;text-align:center;color:var(--dim);font-size:11.5px}
+.watch-empty b{color:var(--muted)}
+.setup-cfg{display:flex;align-items:center;gap:8px;margin-bottom:14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 12px}
+.setup-cfg label{font-size:10.5px;color:var(--muted);font-weight:700;white-space:nowrap}
+.setup-cfg input{flex:1;background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11.5px;font-family:inherit;color:var(--text)}
+
+/* ============ EMPTY STATE ============ */
+.empty-state{text-align:center;padding:70px 20px;color:var(--dim)}
+.empty-state .ic{font-size:36px;margin-bottom:14px;opacity:.5}
+.empty-state h3{color:var(--muted);font-size:15px;margin-bottom:6px}
+.empty-state p{font-size:12px;max-width:340px;margin:0 auto;line-height:1.6}
+
+footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);font-family:var(--mono)}
+
+@media(max-width:900px){
+  .totals{grid-template-columns:repeat(3,1fr)}
+  .bgrid{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  .totals{grid-template-columns:repeat(2,1fr)}
+  h1{font-size:22px}
+}
+</style>
 </head>
 <body>
 
-<div class="header-wrap"><div class="header-logo-row">
-  <div class="logo">
-    <svg class="logo-svg" width="26" height="26" viewBox="0 0 100 100">
-      <polygon points="50,8 68,22 68,38 50,30" fill="#1a3a5c"/>
-      <polygon points="50,8 32,22 32,38 50,30" fill="#1a3a5c"/>
-      <polygon points="50,32 76,48 76,62 50,54" fill="#dc2626"/>
-      <polygon points="50,32 24,48 24,62 50,54" fill="#dc2626"/>
-      <polygon points="50,56 84,74 84,94 50,84" fill="#1a3a5c"/>
-      <polygon points="50,56 16,74 16,94 50,84" fill="#1a3a5c"/>
-    </svg>
-    <div class="logo-tx"><b>Torre de Produtos</b><span>Portfólio 2026</span></div>
+<div class="topbar"><div class="topbar-in">
+  <div class="brand">
+    <span class="hub-backlink" onclick="window.location.href='home.html'">← Voltar</span>
+    <div class="eyebrow">Torre de controle · Portfólio 2026</div>
+    <h1>Roadmaps consolidados</h1>
+    <div class="sub" id="subtxt">Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Nada sai deste navegador.</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="tb-btn" id="saveBtn" onclick="saveHub(true)" title="Salva a importação atual neste navegador — ao reabrir, tudo volta do jeito que você deixou">✓ Tudo salvo</button>
+    <button class="tb-btn tb-btn-outline" onclick="exportHub()" title="Gera um arquivo .html com a versão atual para enviar a outra pessoa">⇩ Exportar</button>
+    <div class="clock">
+      <b id="clockTime">--:--:--</b>
+      <span id="clockDate">-- --- ----</span>
+    </div>
+    <div class="hub-user">
+      <div class="hub-avatar" id="topbarAvatar">--</div>
+      <span id="topbarName">Carregando...</span>
+      <span class="hub-logout" onclick="handleLogout()">Sair</span>
+    </div>
   </div>
 </div></div>
-<div class="topbar">
-  <div class="user">
-    <div class="avatar" id="topbarAvatar">--</div>
-    <span id="topbarName">Carregando...</span>
-    <span class="logout-btn" onclick="handleLogout()">Sair</span>
-  </div>
+
+<div class="shell bodypad">
+  <label class="dz" id="dz" for="fileInput">
+    <div class="dz-icon">⇪</div>
+    <div class="dz-txt">
+      <b>Arraste os arquivos exportados aqui, ou clique para selecionar</b>
+      <span>Aceita múltiplos .html de uma vez — BankManager, Luna, Net Finanças, PIS, ou qualquer outro roadmap gerado no mesmo padrão</span>
+    </div>
+    <input type="file" id="fileInput" accept=".html,.htm" multiple>
+  </label>
+
+  <div class="rail" id="rail"></div>
+
+  <div id="dashArea"></div>
+
+  <footer>PROCESSAMENTO 100% LOCAL · NENHUM DADO É ENVIADO A SERVIDORES · v1.1</footer>
 </div>
 
-<div class="home-wrap">
-  <span class="backlink" onclick="window.location.href='home.html'">← Voltar</span>
-  <h2>Hub de Produtos</h2>
-  <p>Visão macro do portfólio</p>
-
-  <!-- Totais e cards do hub ainda vão ser definidos (dados a caminho). -->
-  <div id="hubTotals"></div>
-  <div class="hub-cards" id="hubCards">
-    <div class="placeholder" style="grid-column:1/-1">Aguardando definição dos dados do Hub.</div>
-  </div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../assets/js/supabaseClient.js"></script>
 <script src="../../assets/js/auth.js"></script>
 <script>
-initTopbar('../../index.html');
+/* ============================================================
+   STATE
+   ============================================================ */
+var PRODUCTS = {}; // key -> {name, color, data:[...], visible:bool, types:{}}
+var PRODUCT_ORDER = []; // array of keys, controls display order (drag to reorder)
+var SORT = {col:'quarter', dir:1};
+var SEARCH = '';
+var FILTER_PRODUCT = 'all';
+var VIEW = 'estrategica'; // 'estrategica' | 'acompanhamento' | product key
+var SETUP_KEYWORD = 'setup de pagamento';
+var DRAG_KEY = null;
 
-// TODO: quando os dados do hub chegarem, preencher #hubTotals (.totals/.tot)
-// e #hubCards (.hub-p / .hub-bar), como no protótipo original.
+var PALETTE = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#db2777','#4338ca'];
+var paletteIdx = 0;
+
+var STATUS_COLORS = {
+  'Finalizado':'#059669','Em andamento':'#2563eb','Em backlog':'#94a3b8',
+  'Impedimento':'#dc2626','Atrasado':'#d97706'
+};
+
+/* ============================================================
+   CLOCK
+   ============================================================ */
+function tickClock(){
+  var d=new Date();
+  var t=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var ds=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
+  document.getElementById('clockTime').textContent=t;
+  document.getElementById('clockDate').textContent=ds;
+}
+tickClock(); setInterval(tickClock,1000);
+
+/* ============================================================
+   FILE PARSING
+   ============================================================ */
+// Finds the character index right after the JSON value that starts at
+// html[startIdx] (which must be '[' or '{'), by counting bracket depth
+// while correctly skipping over the contents of JSON strings (including
+// escaped quotes and escaped backslashes). This is needed because a naive
+// regex like /var DATA=(\[[\s\S]*?\]);/ stops at the FIRST "];" it finds —
+// and roadmap files embed their own import/export code as source text
+// (e.g. a line containing the literal string "var DATA=(\\[[\\s\\S]*?\\]);"
+// inside a JS regex-as-string), which can confuse a naive non-greedy match.
+function findJsonValueEnd(html, startIdx){
+  var openChar = html[startIdx];
+  var closeChar = openChar === '[' ? ']' : '}';
+  var depth = 0;
+  var inString = false;
+  for(var i = startIdx; i < html.length; i++){
+    var ch = html[i];
+    if(inString){
+      if(ch === '\\'){ i++; continue; } // skip escaped char
+      if(ch === '"') inString = false;
+      continue;
+    }
+    if(ch === '"'){ inString = true; continue; }
+    if(ch === openChar) depth++;
+    else if(ch === closeChar){
+      depth--;
+      if(depth === 0) return i + 1; // index right after the closing bracket
+    }
+  }
+  return -1; // unbalanced / not found
+}
+// Scans the whole document for every occurrence of "var <varName>=" followed
+// by openChar, extracts each candidate JSON value via bracket-matching, and
+// returns the first one that (a) parses as valid JSON and (b) is a non-empty
+// array/object. This way, even if a file has decoy text elsewhere that looks
+// like "var DATA=", we skip anything that doesn't actually parse or is empty,
+// and land on the real data.
+function extractByVarName(html, varName, openChar){
+  var closeChar = openChar === '[' ? ']' : '}';
+  var searchFrom = 0;
+  var needle = 'var ' + varName;
+  while(true){
+    var nameIdx = html.indexOf(needle, searchFrom);
+    if(nameIdx === -1) break;
+    // must be followed (after optional whitespace and '=') by the open char
+    var afterName = nameIdx + needle.length;
+    var eqIdx = html.indexOf('=', afterName);
+    if(eqIdx === -1 || eqIdx - afterName > 5){ searchFrom = nameIdx + needle.length; continue; }
+    var between = html.slice(afterName, eqIdx);
+    if(/[^\s]/.test(between)){ searchFrom = nameIdx + needle.length; continue; } // not exactly "var DATA ... =", e.g. "var DATA2="
+    var valStart = eqIdx + 1;
+    while(valStart < html.length && /\s/.test(html[valStart])) valStart++;
+    if(html[valStart] !== openChar){ searchFrom = nameIdx + needle.length; continue; }
+
+    var valEnd = findJsonValueEnd(html, valStart);
+    if(valEnd !== -1){
+      var candidate = html.slice(valStart, valEnd);
+      try {
+        var parsed = JSON.parse(candidate);
+        var isNonEmpty = openChar === '[' ? (Array.isArray(parsed) && parsed.length > 0) : (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0);
+        if(isNonEmpty) return parsed;
+      } catch(e){ /* not valid JSON here, keep scanning */ }
+    }
+    searchFrom = nameIdx + needle.length;
+  }
+  return null;
+}
+function extractField(html, varName){
+  return extractByVarName(html, varName, '[');
+}
+function extractObjField(html, varName){
+  return extractByVarName(html, varName, '{');
+}
+function extractProjectName(html){
+  // The <head><title> is always the first <title> tag in a well-formed document;
+  // later matches can come from embedded library strings, so only look inside <head>.
+  var headEnd = html.indexOf('</head>');
+  var headHtml = headEnd > -1 ? html.slice(0, headEnd) : html.slice(0, 2000);
+  var m = headHtml.match(/<title>([^<]*)<\/title>/);
+  if(m && m[1]){
+    var t = m[1].replace(/^Roadmap\s*/i,'').trim();
+    if(t) return t;
+  }
+  return null;
+}
+function extractProjectNameFromBrand(html){
+  var m = html.match(/class="brand-title"[^>]*>([^<]*)</);
+  if(m && m[1]){
+    var t = m[1].replace(/ROADMAP ESTRATEGICO\s*–\s*/i,'').replace(/\s*\d{4}\s*$/,'').trim();
+    if(t && t.toUpperCase() !== 'BANKMANAGER') return t;
+  }
+  return null;
+}
+
+function handleFiles(fileList){
+  var files = Array.prototype.slice.call(fileList);
+  var pending = files.length;
+  if(!pending) return;
+  files.forEach(function(file){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var html = e.target.result;
+      var data = extractField(html, 'DATA');
+      if(!data){
+        showToast('Não encontrei dados de roadmap em "'+file.name+'"', 'err');
+        pending--; if(pending===0) render();
+        return;
+      }
+      var types = extractObjField(html, 'TYPES') || {};
+      // Prefer <title> (set once at export time and not overwritten by template leftovers);
+      // fall back to the on-page brand title, then to the filename itself.
+      var name = extractProjectName(html) || extractProjectNameFromBrand(html) || file.name.replace(/\.html?$/i,'');
+      var key = name.toLowerCase().replace(/[^a-z0-9]+/g,'_');
+
+      var color = (PRODUCTS[key] && PRODUCTS[key].color) || PALETTE[paletteIdx % PALETTE.length];
+      if(!PRODUCTS[key]) paletteIdx++;
+
+      var isNew = !PRODUCTS[key];
+
+      PRODUCTS[key] = {
+        name: (PRODUCTS[key] && PRODUCTS[key].customName) ? PRODUCTS[key].name : name,
+        customName: (PRODUCTS[key] && PRODUCTS[key].customName) || false,
+        color: color,
+        data: data,
+        types: types,
+        visible: (PRODUCTS[key] ? PRODUCTS[key].visible : true),
+        fileName: file.name,
+        loadedAt: new Date()
+      };
+      if(isNew) PRODUCT_ORDER.push(key);
+      pending--;
+      if(pending===0){ render(); markDirty(); showToast(files.length+' arquivo(s) processado(s)', 'ok'); }
+    };
+    reader.onerror = function(){
+      pending--; if(pending===0) render();
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+document.getElementById('fileInput').addEventListener('change', function(e){
+  handleFiles(e.target.files);
+  e.target.value = '';
+});
+var dz = document.getElementById('dz');
+dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', function(){ dz.classList.remove('drag'); });
+dz.addEventListener('drop', function(e){
+  e.preventDefault(); dz.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+function showToast(msg, kind){
+  var t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);'+
+    'background:'+(kind==='err'?'#7f1d1d':'#064e3b')+';color:#fff;padding:10px 18px;'+
+    'border-radius:10px;font-size:12px;font-family:Segoe UI,sans-serif;z-index:9999;'+
+    'box-shadow:0 8px 24px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1)';
+  document.body.appendChild(t);
+  setTimeout(function(){ t.style.transition='.3s'; t.style.opacity='0'; setTimeout(function(){t.remove();},300); }, 2400);
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function fmtBRL(v){
+  return 'R$ '+(v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+function allVisibleData(){
+  var arr = [];
+  PRODUCT_ORDER.forEach(function(k){
+    var p = PRODUCTS[k];
+    if(!p || !p.visible) return;
+    p.data.forEach(function(item){
+      arr.push(Object.assign({}, item, {__product:k, __productName:p.name, __color:p.color}));
+    });
+  });
+  return arr;
+}
+function removeProduct(key){
+  var name = PRODUCTS[key] ? PRODUCTS[key].name : key;
+  if(!confirm('Excluir "'+name+'" definitivamente?\n\nIsso remove o produto e todos os seus épicos da Torre de Controle agora — não é um "ocultar", os dados saem da tela e da memória. Para trazê-lo de volta depois, basta subir o arquivo .html exportado novamente.')) return;
+  delete PRODUCTS[key];
+  PRODUCT_ORDER = PRODUCT_ORDER.filter(function(k){ return k!==key; });
+  if(VIEW === key) VIEW = 'estrategica';
+  render();
+  markDirty();
+  showToast('"'+name+'" excluído', 'ok');
+}
+function toggleProduct(key){
+  PRODUCTS[key].visible = !PRODUCTS[key].visible;
+  render();
+  markDirty();
+}
+function startRename(key, evt){
+  evt.stopPropagation();
+  var nameEl = document.getElementById('pcname_'+key);
+  var current = PRODUCTS[key].name;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'pc-name-input';
+  input.value = current;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  function commit(){
+    var v = input.value.trim();
+    if(v){
+      PRODUCTS[key].name = v;
+      PRODUCTS[key].customName = true;
+    }
+    render();
+    markDirty();
+  }
+  input.addEventListener('click', function(e){ e.stopPropagation(); });
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Enter') commit();
+    if(e.key === 'Escape') render();
+  });
+  input.addEventListener('blur', commit);
+}
+function startEditPO(key, evt){
+  evt.stopPropagation();
+  var poEl = document.getElementById('pcpo_'+key);
+  var current = PRODUCTS[key].poName || '';
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'pc-po-input';
+  input.value = current;
+  input.placeholder = 'Nome do PO';
+  poEl.replaceWith(input);
+  input.focus();
+  input.select();
+  function commit(){
+    PRODUCTS[key].poName = input.value.trim();
+    render();
+    markDirty();
+  }
+  input.addEventListener('click', function(e){ e.stopPropagation(); });
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Enter') commit();
+    if(e.key === 'Escape') render();
+  });
+  input.addEventListener('blur', commit);
+}
+
+/* ============================================================
+   DRAG TO REORDER
+   ============================================================ */
+function onDragStart(key, evt){
+  DRAG_KEY = key;
+  evt.dataTransfer.effectAllowed = 'move';
+  evt.dataTransfer.setData('text/plain', key);
+  requestAnimationFrame(function(){
+    var el = document.getElementById('pcard_'+key);
+    if(el) el.classList.add('dragging');
+  });
+}
+function onDragEnd(){
+  DRAG_KEY = null;
+  document.querySelectorAll('.pcard').forEach(function(el){ el.classList.remove('dragging','drag-over'); });
+}
+function onDragOverCard(key, evt){
+  evt.preventDefault();
+  if(key === DRAG_KEY) return;
+  evt.currentTarget.classList.add('drag-over');
+}
+function onDragLeaveCard(evt){
+  evt.currentTarget.classList.remove('drag-over');
+}
+function onDropCard(key, evt){
+  evt.preventDefault();
+  evt.currentTarget.classList.remove('drag-over');
+  if(!DRAG_KEY || DRAG_KEY === key) return;
+  var from = PRODUCT_ORDER.indexOf(DRAG_KEY);
+  var to = PRODUCT_ORDER.indexOf(key);
+  if(from===-1||to===-1) return;
+  PRODUCT_ORDER.splice(from,1);
+  PRODUCT_ORDER.splice(to,0,DRAG_KEY);
+  DRAG_KEY = null;
+  render();
+  markDirty();
+}
+
+/* ============================================================
+   VIEW SWITCHING
+   ============================================================ */
+function setView(v){
+  VIEW = v;
+  render();
+}
+
+/* ============================================================
+   RENDER: PRODUCT RAIL
+   ============================================================ */
+function renderRail(){
+  var rail = document.getElementById('rail');
+  var html = '';
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k]; });
+
+  keys.forEach(function(key){
+    var p = PRODUCTS[key];
+    var byStatus = {};
+    p.data.forEach(function(it){ byStatus[it.status] = (byStatus[it.status]||0)+1; });
+    var total = p.data.length;
+    var barSegs = Object.keys(STATUS_COLORS).map(function(st){
+      var n = byStatus[st]||0;
+      if(!n) return '';
+      var pct = (n/total*100).toFixed(1);
+      return '<div style="width:'+pct+'%;background:'+STATUS_COLORS[st]+'" title="'+st+': '+n+'"></div>';
+    }).join('');
+
+    html += '<div class="pcard'+(p.visible?'':' off')+'" id="pcard_'+key+'" style="--accent:'+p.color+'" '+
+      'draggable="true" '+
+      'ondragstart="onDragStart(\''+key+'\',event)" ondragend="onDragEnd()" '+
+      'ondragover="onDragOverCard(\''+key+'\',event)" ondragleave="onDragLeaveCard(event)" ondrop="onDropCard(\''+key+'\',event)" '+
+      'onclick="toggleProduct(\''+key+'\')">'+
+      '<div class="pc-drag" title="Arraste para reordenar">⋮⋮</div>'+
+      '<button class="pc-x" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();removeProduct(\''+key+'\')" title="Excluir este roadmap">✕</button>'+
+      '<div class="pc-top">'+
+        '<div><div class="pc-name" id="pcname_'+key+'" onclick="startRename(\''+key+'\',event)">'+p.name+'<span class="pc-name-edit">✎</span></div><div class="pc-sub">'+p.fileName.replace('.html','')+'</div></div>'+
+        '<div class="pc-toggle"></div>'+
+      '</div>'+
+      '<div class="pc-count">'+total+'</div>'+
+      '<div class="pc-count-lbl">épicos carregados</div>'+
+      '<div class="pc-po" id="pcpo_'+key+'" onclick="startEditPO(\''+key+'\',event)">'+
+        '<span class="pc-po-ic">👤</span>'+(p.poName ? p.poName : '<span class="pc-po-empty">Definir PO</span>')+
+      '</div>'+
+      '<div class="pc-bar">'+barSegs+'</div>'+
+      (p.visible?'<button class="pc-view-btn" onclick="event.stopPropagation();setView(\''+key+'\')">Ver individual →</button>':'')+
+    '</div>';
+  });
+
+  // Empty slots hint
+  if(keys.length < 4){
+    var remaining = 4 - keys.length;
+    for(var i=0;i<remaining;i++){
+      html += '<div class="pcard empty"><div class="pc-empty-txt">Aguardando upload<br><b>arquivo '+(keys.length+i+1)+'</b></div></div>';
+    }
+  }
+
+  rail.innerHTML = html;
+}
+
+/* ============================================================
+   RENDER: VIEW TABS
+   ============================================================ */
+function renderTabs(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var html = '<button class="tab'+(VIEW==='estrategica'?' on':'')+'" onclick="setView(\'estrategica\')">'+
+    '<span class="tab-ic">◆</span> Estratégica</button>'+
+    '<button class="tab'+(VIEW==='acompanhamento'?' on':'')+'" style="--tc:#dc2626" onclick="setView(\'acompanhamento\')">'+
+    '<span class="tab-ic" style="color:#dc2626">▲</span> Acompanhamento</button>';
+  keys.forEach(function(k){
+    var p = PRODUCTS[k];
+    html += '<button class="tab'+(VIEW===k?' on':'')+'" style="--tc:'+p.color+'" onclick="setView(\''+k+'\')">'+
+      '<span class="tab-dot" style="background:'+p.color+'"></span>'+p.name+'</button>';
+  });
+  return html;
+}
+
+/* ============================================================
+   RENDER: DASHBOARD
+   ============================================================ */
+function render(){
+  renderRail();
+  var area = document.getElementById('dashArea');
+  var visibleKeys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+
+  if(Object.keys(PRODUCTS).length === 0){
+    area.innerHTML = '<div class="empty-state">'+
+      '<div class="ic">◈</div>'+
+      '<h3>Nenhum roadmap carregado</h3>'+
+      '<p>Envie os arquivos HTML exportados de cada sistema (BankManager, Luna, Net Finanças, PIS...) para ver o painel consolidado, os totalizadores por produto e a tabela combinada de épicos.</p>'+
+    '</div>';
+    document.getElementById('subtxt').textContent = 'Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Nada sai deste navegador.';
+    return;
+  }
+
+  document.getElementById('subtxt').textContent = Object.keys(PRODUCTS).length+' produto(s) carregado(s) · '+visibleKeys.length+' visível(is) no painel';
+
+  // Fall back to estratégica if the view points to a hidden/removed product
+  if(VIEW !== 'estrategica' && VIEW !== 'acompanhamento' && visibleKeys.indexOf(VIEW) === -1) VIEW = 'estrategica';
+
+  var tabsHtml = '<div class="tabs" id="tabsRow">'+renderTabs()+'</div>';
+
+  if(visibleKeys.length === 0){
+    area.innerHTML = tabsHtml + '<div class="empty-state">'+
+      '<div class="ic">○</div>'+
+      '<h3>Todos os produtos estão ocultos</h3>'+
+      '<p>Clique em um card acima para exibi-lo no painel.</p>'+
+    '</div>';
+    return;
+  }
+
+  if(VIEW === 'estrategica'){
+    renderEstrategica(area, tabsHtml, visibleKeys);
+  } else if(VIEW === 'acompanhamento'){
+    renderAcompanhamento(area, tabsHtml);
+  } else {
+    renderProdutoIndividual(area, tabsHtml, VIEW);
+  }
+}
+
+function renderEstrategica(area, tabsHtml, visibleKeys){
+  var all = allVisibleData();
+
+  area.innerHTML = tabsHtml +
+    '<div class="sec-hdr"><h2>Visão financeira consolidada</h2><div class="sec-line"></div><span class="cnt">'+visibleKeys.length+' produtos</span></div>'+
+    '<div class="totals" id="totalsRow"></div>'+
+    '<div class="sec-hdr"><h2>Valor mapeado por produto</h2><div class="sec-line"></div></div>'+
+    '<div id="byProductValue" class="panel" style="margin-bottom:32px"></div>'+
+    '<div class="sec-hdr"><h2>Distribuição de épicos</h2><div class="sec-line"></div></div>'+
+    '<div class="bgrid">'+
+      '<div class="panel"><h3>Épicos por produto</h3><div id="byProduct"></div></div>'+
+      '<div class="panel"><h3>Status geral</h3><div id="byStatus" class="donutwrap"></div></div>'+
+    '</div>'+
+    '<div class="sec-hdr"><h2>Épicos</h2><div class="sec-line"></div></div>'+
+    '<div class="tbl-wrap">'+
+      '<div class="tbl-hdr">'+
+        '<h3>Tabela combinada</h3>'+
+        '<select class="sel" id="fProduct" onchange="onFilterChange()"></select>'+
+        '<input class="search" id="fSearch" placeholder="Buscar título, ID, PO..." oninput="onSearchChange(this.value)">'+
+      '</div>'+
+      '<div style="overflow-x:auto"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>'+
+    '</div>';
+
+  renderTotals(all);
+  renderByProductValue();
+  renderByProduct();
+  renderByStatus(all);
+  renderFilterSelect();
+  renderTable();
+}
+
+function renderProdutoIndividual(area, tabsHtml, key){
+  var p = PRODUCTS[key];
+  var all = p.data.map(function(item){
+    return Object.assign({}, item, {__product:key, __productName:p.name, __color:p.color});
+  });
+  FILTER_PRODUCT = key;
+
+  area.innerHTML = tabsHtml +
+    '<div class="sec-hdr"><h2 style="color:'+p.color+'">'+p.name+'</h2><div class="sec-line"></div>'+
+      (p.poName ? '<span class="cnt" style="font-weight:700;color:var(--text)">PO: '+p.poName+'</span>' : '')+
+      '<span class="cnt">'+all.length+' épicos</span>'+
+      '<button class="btn-danger-ghost" onclick="removeProduct(\''+key+'\')">Excluir este produto</button>'+
+    '</div>'+
+    '<div class="totals" id="totalsRow"></div>'+
+    '<div class="sec-hdr"><h2>Distribuição</h2><div class="sec-line"></div></div>'+
+    '<div class="bgrid">'+
+      '<div class="panel"><h3>Layers / Tipos</h3><div id="byProduct"></div></div>'+
+      '<div class="panel"><h3>Status</h3><div id="byStatus" class="donutwrap"></div></div>'+
+    '</div>'+
+    '<div class="sec-hdr"><h2>Épicos de '+p.name+'</h2><div class="sec-line"></div></div>'+
+    '<div class="tbl-wrap">'+
+      '<div class="tbl-hdr">'+
+        '<h3>Tabela do produto</h3>'+
+        '<input class="search" id="fSearch" placeholder="Buscar título, ID, PO..." oninput="onSearchChange(this.value)">'+
+      '</div>'+
+      '<div style="overflow-x:auto"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>'+
+    '</div>';
+
+  renderTotals(all);
+  renderByLayer(key);
+  renderByStatus(all);
+  renderTableForProduct(key);
+}
+
+/* ============================================================
+   RENDER: ACOMPANHAMENTO (destaques críticos)
+   ============================================================ */
+function isSetupPagamento(e){
+  var kw = SETUP_KEYWORD.toLowerCase().trim();
+  if(!kw) return false;
+  var hay = ((e.titulo||'')+' '+(e.tipo||'')).toLowerCase();
+  return hay.indexOf(kw) > -1;
+}
+function updateSetupKeyword(v){
+  SETUP_KEYWORD = v;
+  var area = document.getElementById('dashArea');
+  var tabsHtml = '<div class="tabs" id="tabsRow">'+renderTabs()+'</div>';
+  renderAcompanhamento(area, tabsHtml);
+  // restore focus/cursor to the input after re-render
+  var input = area.querySelector('.setup-cfg input');
+  if(input){ input.focus(); var len=input.value.length; input.setSelectionRange(len,len); }
+}
+function wcardMeta(e){
+  var parts = [];
+  parts.push('<span><b>'+(e.id||'—')+'</b></span>');
+  if(e.quarter) parts.push('<span>'+e.quarter+'</span>');
+  if(e.po) parts.push('<span>PO: '+e.po+'</span>');
+  parts.push('<span>Progresso: <b>'+(e.prog||0)+'%</b></span>');
+  return parts.join('');
+}
+function watchCard(e, accentColor){
+  var sc = STATUS_COLORS[e.status] || '#64748b';
+  return '<div class="wcard" style="--wc:'+accentColor+'">'+
+    '<div class="wcard-top">'+
+      '<span class="wcard-prod" style="background:'+e.__color+'22;color:'+e.__color+'">'+e.__productName+'</span>'+
+      '<span class="wcard-badge" style="background:'+sc+'22;color:'+sc+'">'+e.status+'</span>'+
+    '</div>'+
+    '<div class="wcard-title">'+(e.titulo||'(sem título)')+'</div>'+
+    '<div class="wcard-meta">'+wcardMeta(e)+'</div>'+
+  '</div>';
+}
+function renderAcompanhamento(area, tabsHtml){
+  var all = allVisibleData();
+
+  var setupEpicos = all.filter(isSetupPagamento);
+  var atrasados = all.filter(function(e){ return e.status === 'Atrasado'; });
+  var bloqueados = all.filter(function(e){ return e.status === 'Impedimento'; });
+
+  function section(idIc, color, title, sub, list, key){
+    var cards = list.length
+      ? '<div class="watch-cards">'+list.map(function(e){ return watchCard(e, color); }).join('')+'</div>'
+      : '<div class="watch-empty"><b>Nenhum item</b> encontrado nesta categoria no momento.</div>';
+    return '<div class="watch-sec">'+
+      '<div class="watch-hdr">'+
+        '<div class="watch-ic" style="background:'+color+'22;color:'+color+'">'+idIc+'</div>'+
+        '<div class="watch-title">'+title+'<small>'+sub+'</small></div>'+
+        '<div class="watch-cnt" style="color:'+color+'">'+list.length+'</div>'+
+      '</div>'+
+      cards+
+    '</div>';
+  }
+
+  area.innerHTML = tabsHtml +
+    '<div class="sec-hdr"><h2>Acompanhamento</h2><div class="sec-line"></div><span class="cnt">itens que precisam de atenção agora</span></div>'+
+
+    '<div class="setup-cfg">'+
+      '<label>Palavra-chave para "cliente esperando"</label>'+
+      '<input value="'+SETUP_KEYWORD.replace(/"/g,'&quot;')+'" oninput="updateSetupKeyword(this.value)" placeholder="ex: setup de pagamento">'+
+    '</div>'+
+
+    section('◈', '#7c3aed', 'Setup de pagamento — cliente esperando', 'épicos de setup de pagamento com cliente aguardando a feature', setupEpicos) +
+    section('⏱', '#d97706', 'Épicos atrasados', 'status = Atrasado', atrasados) +
+    section('⛔', '#dc2626', 'Épicos com bloqueio', 'status = Impedimento', bloqueados);
+}
+
+function renderTotals(all){
+  var totalEpicos = all.length;
+  var finalizado = all.filter(function(e){return e.status==='Finalizado';}).length;
+  var andamento = all.filter(function(e){return e.status==='Em andamento';}).length;
+  var atrasadoImped = all.filter(function(e){return e.status==='Atrasado'||e.status==='Impedimento';}).length;
+  var valorTotal = all.reduce(function(s,e){return s+(e.valor||0);},0);
+  var progMedio = all.length ? Math.round(all.reduce(function(s,e){return s+(e.prog||0);},0)/all.length) : 0;
+
+  var produtosCount = VIEW === 'estrategica'
+    ? PRODUCT_ORDER.filter(function(k){return PRODUCTS[k]&&PRODUCTS[k].visible;}).length
+    : 1;
+
+  var cards = [
+    {lbl:'Total de épicos', val:totalEpicos, sub:VIEW==='estrategica'?(produtosCount+' produtos'):'neste produto', c:'#2563eb'},
+    {lbl:'Finalizados', val:finalizado, sub:totalEpicos?Math.round(finalizado/totalEpicos*100)+'% do total':'—', c:'#059669'},
+    {lbl:'Em andamento', val:andamento, sub:totalEpicos?Math.round(andamento/totalEpicos*100)+'% do total':'—', c:'#2563eb'},
+    {lbl:'Atrasado / Impedimento', val:atrasadoImped, sub:totalEpicos?Math.round(atrasadoImped/totalEpicos*100)+'% do total':'—', c:'#dc2626'},
+    {lbl:'Progresso médio', val:progMedio+'%', sub:'ponderado por item', c:'#7c3aed'},
+    {lbl:'Valor total mapeado', val:fmtBRL(valorTotal), sub:VIEW==='estrategica'?'soma de todos os produtos':'neste produto', c:'#d97706'},
+  ];
+  document.getElementById('totalsRow').innerHTML = cards.map(function(c){
+    return '<div class="tot" style="--c:'+c.c+'"><div class="tot-lbl">'+c.lbl+'</div><div class="tot-val">'+c.val+'</div><div class="tot-sub">'+c.sub+'</div></div>';
+  }).join('');
+}
+
+function renderByProductValue(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var totals = keys.map(function(k){
+    var p = PRODUCTS[k];
+    var v = p.data.reduce(function(s,e){return s+(e.valor||0);},0);
+    return {key:k, name:p.name, color:p.color, valor:v};
+  });
+  var maxV = Math.max.apply(null, totals.map(function(t){return t.valor;}).concat([1]));
+  var grandTotal = totals.reduce(function(s,t){return s+t.valor;},0);
+
+  var rows = totals.map(function(t){
+    var pct = maxV ? (t.valor/maxV*100) : 0;
+    var shareOfTotal = grandTotal ? Math.round(t.valor/grandTotal*100) : 0;
+    return '<div class="valrow">'+
+      '<div class="nm" style="color:'+t.color+'">● '+t.name+'</div>'+
+      '<div class="valbar-track"><div class="valbar-fill" style="width:'+pct+'%;background:'+t.color+'"></div></div>'+
+      '<div class="valamt">'+fmtBRL(t.valor)+'</div>'+
+      '<div class="valpct">'+shareOfTotal+'%</div>'+
+    '</div>';
+  }).join('');
+
+  document.getElementById('byProductValue').innerHTML =
+    '<div class="valgrid-hdr"><span>Produto</span><span></span><span>Valor mapeado</span><span>Share</span></div>'+
+    (rows || '<div style="color:var(--dim);font-size:11px;padding:10px 0">Nenhum produto visível</div>')+
+    '<div class="valrow valrow-total"><div class="nm">TOTAL DO PORTFÓLIO</div><div></div><div class="valamt">'+fmtBRL(grandTotal)+'</div><div class="valpct">100%</div></div>';
+}
+
+function renderByLayer(key){
+  var p = PRODUCTS[key];
+  var byType = {};
+  p.data.forEach(function(e){ byType[e.tipo] = (byType[e.tipo]||0)+1; });
+  var total = p.data.length;
+  var rows = Object.keys(byType).sort(function(a,b){return byType[b]-byType[a];}).map(function(t){
+    var n = byType[t];
+    var pct = (n/total*100).toFixed(1);
+    return '<div class="stackrow"><div class="nm">'+t+'</div>'+
+      '<div class="stackbar"><div style="width:'+pct+'%;background:'+p.color+'"></div></div><div class="tot-n">'+n+'</div></div>';
+  }).join('');
+  document.getElementById('byProduct').innerHTML = rows || '<div style="color:var(--dim);font-size:11px">Sem dados</div>';
+}
+
+function renderByProduct(){
+  var rows = '';
+  PRODUCT_ORDER.forEach(function(key){
+    var p = PRODUCTS[key];
+    if(!p || !p.visible) return;
+    var total = p.data.length;
+    var segs = Object.keys(STATUS_COLORS).map(function(st){
+      var n = p.data.filter(function(e){return e.status===st;}).length;
+      if(!n) return '';
+      var pct = (n/total*100).toFixed(1);
+      return '<div style="width:'+pct+'%;background:'+STATUS_COLORS[st]+'" title="'+st+': '+n+'"></div>';
+    }).join('');
+    rows += '<div class="stackrow"><div class="nm" style="color:'+p.color+'">● '+p.name+'</div>'+
+      '<div class="stackbar">'+segs+'</div><div class="tot-n">'+total+'</div></div>';
+  });
+  document.getElementById('byProduct').innerHTML = rows || '<div style="color:var(--dim);font-size:11px">Nenhum produto visível</div>';
+}
+
+function renderByStatus(all){
+  var order = ['Finalizado','Em andamento','Em backlog','Impedimento','Atrasado'];
+  var total = all.length;
+  var legend = order.map(function(st){
+    var n = all.filter(function(e){return e.status===st;}).length;
+    if(!n) return '';
+    return '<div class="leg-item"><div class="leg-dot" style="background:'+STATUS_COLORS[st]+'"></div>'+st+'<b>'+n+'</b></div>';
+  }).join('');
+
+  // simple donut via conic-gradient
+  var acc = 0;
+  var stops = order.map(function(st){
+    var n = all.filter(function(e){return e.status===st;}).length;
+    if(!n) return '';
+    var pct = n/total*100;
+    var s = acc; acc += pct;
+    return STATUS_COLORS[st]+' '+s.toFixed(1)+'% '+acc.toFixed(1)+'%';
+  }).filter(Boolean).join(', ');
+
+  document.getElementById('byStatus').innerHTML =
+    '<div style="width:110px;height:110px;border-radius:50%;background:conic-gradient('+stops+');flex-shrink:0;box-shadow:0 0 0 6px rgba(255,255,255,.03)"></div>'+
+    '<div class="legend">'+legend+'</div>';
+}
+
+function renderFilterSelect(){
+  var sel = document.getElementById('fProduct');
+  var opts = '<option value="all">Todos os produtos</option>';
+  PRODUCT_ORDER.forEach(function(key){
+    if(!PRODUCTS[key] || !PRODUCTS[key].visible) return;
+    opts += '<option value="'+key+'">'+PRODUCTS[key].name+'</option>';
+  });
+  sel.innerHTML = opts;
+  sel.value = FILTER_PRODUCT;
+}
+function onFilterChange(){
+  FILTER_PRODUCT = document.getElementById('fProduct').value;
+  renderTable();
+}
+function onSearchChange(v){
+  SEARCH = v.toLowerCase();
+  if(VIEW === 'estrategica') renderTable();
+  else renderTableForProduct(VIEW);
+}
+function sortBy(col){
+  if(SORT.col === col) SORT.dir *= -1;
+  else { SORT.col = col; SORT.dir = 1; }
+  if(VIEW === 'estrategica') renderTable();
+  else renderTableForProduct(VIEW);
+}
+
+var COLS = [
+  {k:'__productName', l:'Produto'},
+  {k:'id', l:'ID'},
+  {k:'titulo', l:'Título'},
+  {k:'tipo', l:'Layer'},
+  {k:'status', l:'Status'},
+  {k:'prioridade', l:'Prioridade'},
+  {k:'prog', l:'Progresso'},
+  {k:'quarter', l:'Quarter'},
+  {k:'po', l:'PO'},
+  {k:'valor', l:'Valor'}
+];
+var COLS_SINGLE = COLS.filter(function(c){ return c.k !== '__productName'; });
+
+function sortRows(rows){
+  rows.sort(function(a,b){
+    var va = a[SORT.col], vb = b[SORT.col];
+    if(typeof va === 'number' && typeof vb === 'number') return (va-vb)*SORT.dir;
+    va = (va||'').toString().toLowerCase(); vb = (vb||'').toString().toLowerCase();
+    if(va<vb) return -1*SORT.dir;
+    if(va>vb) return 1*SORT.dir;
+    return 0;
+  });
+  return rows;
+}
+function rowsHtml(rows, cols){
+  var maxRows = 300;
+  var shown = rows.slice(0, maxRows);
+  var body = shown.map(function(r){
+    var sc = STATUS_COLORS[r.status] || '#64748b';
+    var prodColor = r.__color;
+    var cells = cols.map(function(c){
+      if(c.k==='__productName') return '<td><span class="prod-tag" style="background:'+prodColor+'22;color:'+prodColor+'">'+r.__productName+'</span></td>';
+      if(c.k==='id') return '<td style="font-family:var(--mono);color:var(--dim);font-size:10.5px">'+(r.id||'')+'</td>';
+      if(c.k==='titulo') return '<td style="color:var(--text);font-weight:600;max-width:280px">'+(r.titulo||'')+'</td>';
+      if(c.k==='tipo') return '<td style="color:var(--muted)">'+(r.tipo||'')+'</td>';
+      if(c.k==='status') return '<td><span class="badge" style="background:'+sc+'22;color:'+sc+'">'+(r.status||'')+'</span></td>';
+      if(c.k==='prioridade') return '<td style="color:var(--muted)">'+(r.prioridade||'')+'</td>';
+      if(c.k==='prog') return '<td><div class="prog-mini"><div class="track"><div class="fill" style="width:'+(r.prog||0)+'%;background:'+prodColor+'"></div></div><span style="font-family:var(--mono);font-size:10px;color:var(--dim)">'+(r.prog||0)+'%</span></div></td>';
+      if(c.k==='quarter') return '<td style="color:var(--muted)">'+(r.quarter||'')+'</td>';
+      if(c.k==='po') return '<td style="color:var(--muted)">'+(r.po||'—')+'</td>';
+      if(c.k==='valor') return '<td style="font-family:var(--mono);color:var(--muted)">'+((r.valor||0)>0?fmtBRL(r.valor):'—')+'</td>';
+      return '<td></td>';
+    }).join('');
+    return '<tr>'+cells+'</tr>';
+  }).join('') || '<tr><td colspan="'+cols.length+'" style="text-align:center;color:var(--dim);padding:30px">Nenhum épico encontrado</td></tr>';
+
+  if(rows.length > maxRows){
+    body += '<tr><td colspan="'+cols.length+'" style="text-align:center;color:var(--dim);padding:14px;font-size:10.5px">Mostrando '+maxRows+' de '+rows.length+' — refine a busca para ver mais</td></tr>';
+  }
+  return body;
+}
+
+function renderTable(){
+  var thead = document.getElementById('theadRow');
+  thead.innerHTML = COLS.map(function(c){
+    var arrow = SORT.col===c.k ? (SORT.dir===1?' ▲':' ▼') : '';
+    return '<th onclick="sortBy(\''+c.k+'\')">'+c.l+arrow+'</th>';
+  }).join('');
+
+  var rows = allVisibleData();
+  if(FILTER_PRODUCT !== 'all') rows = rows.filter(function(r){return r.__product===FILTER_PRODUCT;});
+  if(SEARCH){
+    rows = rows.filter(function(r){
+      return (r.titulo||'').toLowerCase().indexOf(SEARCH)>-1 ||
+             (r.id||'').toLowerCase().indexOf(SEARCH)>-1 ||
+             (r.po||'').toLowerCase().indexOf(SEARCH)>-1 ||
+             (r.produto||'').toLowerCase().indexOf(SEARCH)>-1;
+    });
+  }
+  sortRows(rows);
+  document.getElementById('tbody').innerHTML = rowsHtml(rows, COLS);
+}
+
+function renderTableForProduct(key){
+  var thead = document.getElementById('theadRow');
+  thead.innerHTML = COLS_SINGLE.map(function(c){
+    var arrow = SORT.col===c.k ? (SORT.dir===1?' ▲':' ▼') : '';
+    return '<th onclick="sortBy(\''+c.k+'\')">'+c.l+arrow+'</th>';
+  }).join('');
+
+  var p = PRODUCTS[key];
+  var rows = p.data.map(function(item){
+    return Object.assign({}, item, {__product:key, __productName:p.name, __color:p.color});
+  });
+  if(SEARCH){
+    rows = rows.filter(function(r){
+      return (r.titulo||'').toLowerCase().indexOf(SEARCH)>-1 ||
+             (r.id||'').toLowerCase().indexOf(SEARCH)>-1 ||
+             (r.po||'').toLowerCase().indexOf(SEARCH)>-1 ||
+             (r.produto||'').toLowerCase().indexOf(SEARCH)>-1;
+    });
+  }
+  sortRows(rows);
+  document.getElementById('tbody').innerHTML = rowsHtml(rows, COLS_SINGLE);
+}
+
+/* ============================================================
+   PERSISTENCE (save/load the whole hub state in localStorage)
+   ============================================================ */
+var HUB_STORAGE_KEY = 'bmRoadmapHub-state-v1';
+var DIRTY = false; // true = there are unsaved changes since last save/load
+
+function markDirty(){
+  DIRTY = true;
+  updateSaveIndicator();
+}
+function updateSaveIndicator(){
+  var btn = document.getElementById('saveBtn');
+  if(!btn) return;
+  if(DIRTY){
+    btn.classList.add('dirty');
+    btn.textContent = '● Salvar alterações';
+  } else {
+    btn.classList.remove('dirty');
+    btn.textContent = '✓ Tudo salvo';
+  }
+}
+function saveHub(showMsg){
+  try {
+    var payload = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      products: PRODUCTS,
+      order: PRODUCT_ORDER
+    };
+    localStorage.setItem(HUB_STORAGE_KEY, JSON.stringify(payload));
+    DIRTY = false;
+    updateSaveIndicator();
+    if(showMsg) showToast('Torre de Controle salva neste navegador', 'ok');
+    return true;
+  } catch(e){
+    if(showMsg) showToast('Não foi possível salvar (armazenamento cheio ou bloqueado)', 'err');
+    return false;
+  }
+}
+function loadHub(){
+  try {
+    var raw = localStorage.getItem(HUB_STORAGE_KEY);
+    if(!raw) return false;
+    var payload = JSON.parse(raw);
+    if(!payload || !payload.products || !payload.order) return false;
+    PRODUCTS = payload.products;
+    PRODUCT_ORDER = payload.order;
+    // recompute paletteIdx so newly-added products after a reload get a fresh color
+    paletteIdx = PRODUCT_ORDER.length;
+    return true;
+  } catch(e){
+    return false;
+  }
+}
+function clearSavedHub(){
+  if(!confirm('Apagar os dados salvos da Torre de Controle neste navegador?\n\nOs roadmaps carregados agora na tela continuam visíveis até você recarregar a página, mas não serão restaurados automaticamente da próxima vez.')) return;
+  try { localStorage.removeItem(HUB_STORAGE_KEY); } catch(e){}
+  showToast('Dados salvos apagados', 'ok');
+  markDirty();
+}
+
+/* ============================================================
+   EXPORT (produce a standalone HTML snapshot to share)
+   ============================================================ */
+function exportHub(){
+  if(Object.keys(PRODUCTS).length === 0){
+    showToast('Nada para exportar ainda — carregue ao menos um roadmap', 'err');
+    return;
+  }
+  // Save current state first so the exported snapshot matches what's on screen
+  saveHub(false);
+
+  var payload = {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    products: PRODUCTS,
+    order: PRODUCT_ORDER
+  };
+  var payloadJson = JSON.stringify(payload);
+
+  // Take this very document's HTML and inject an auto-load snapshot so the
+  // recipient opens the file and sees the exact same consolidated view,
+  // without needing to re-upload every individual roadmap file themselves.
+  var currentHtml = document.documentElement.outerHTML;
+  var snapshotScript = '<script id="hub-snapshot-data">window.__HUB_SNAPSHOT__='+payloadJson+';</'+'script>\n</body>';
+  var exportedHtml = '<!DOCTYPE html>\n<html lang="pt-BR">' +
+    currentHtml.replace(/^[\s\S]*?<html[^>]*>/i,'').replace(/<\/body>\s*<\/html>\s*$/i, snapshotScript + '\n</html>');
+
+  var blob = new Blob([exportedHtml], {type:'text/html;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var ts = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = 'torre_de_controle_'+ts+'.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  showToast('Arquivo exportado — envie o .html para quem precisar ver esta versão', 'ok');
+}
+
+render();
+// Try to restore a previously saved session; if found, re-render with it.
+if(loadHub()){
+  render();
+  updateSaveIndicator();
+  showToast('Torre de Controle restaurada da última sessão salva', 'ok');
+} else if(window.__HUB_SNAPSHOT__ && window.__HUB_SNAPSHOT__.products){
+  // This file was opened as an exported snapshot from someone else — load it directly.
+  PRODUCTS = window.__HUB_SNAPSHOT__.products;
+  PRODUCT_ORDER = window.__HUB_SNAPSHOT__.order || Object.keys(PRODUCTS);
+  paletteIdx = PRODUCT_ORDER.length;
+  render();
+  updateSaveIndicator();
+  showToast('Exibindo versão recebida por arquivo — clique em Salvar para mantê-la neste navegador também', 'ok');
+} else {
+  updateSaveIndicator();
+}
+
+// Integração com o portal: protege a página e preenche usuário/logout.
+initTopbar('../../index.html');
 </script>
 </body>
 </html>

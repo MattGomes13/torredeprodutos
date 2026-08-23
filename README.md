@@ -78,10 +78,33 @@ npx serve .
 
 ## Pendências (aguardando conteúdo)
 
-- `modules/torre-de-produtos/produtos.html`: dados dos produtos.
-- `modules/torre-de-produtos/hub.html`: dados do hub consolidado.
+- `modules/torre-de-produtos/produtos.html`: dados dos produtos (provavelmente
+  vêm como arquivos de roadmap individuais, no mesmo padrão que o Hub lê — ver abaixo).
 - Tela de detalhe do produto (roadmap por épico) ainda não foi migrada.
 - Hoje a escolha de perfil (Stakeholder/PO) em `role.html` é livre —
   o ideal, quando o sistema estiver mais avançado, é essa escolha vir
   automaticamente do campo `role` da tabela `profiles` em vez de o
   usuário poder se autodeclarar PO.
+
+### Decisão em aberto: `hub.html`
+
+O Hub que foi integrado (`modules/torre-de-produtos/hub.html`) é uma
+ferramenta completa de **importação manual**: o usuário arrasta os `.html`
+exportados de cada roadmap (BankManager, Luna, etc.) e ela lê os dados
+embutidos (`var DATA=[...]`) e salva tudo no `localStorage` do navegador
+— ou seja, os dados ficam só naquele computador/navegador, não são
+compartilhados entre usuários do portal.
+
+Isso foi mantido como estava para não quebrar a ferramenta antes de você
+decidir o que faz mais sentido:
+
+1. **Manter como está** — cada pessoa importa os arquivos no seu próprio
+   navegador. Simples, mas cada um vê só o que importou localmente.
+2. **Migrar para o Supabase** — os dados dos roadmaps ficam no banco,
+   compartilhados entre todos que acessam o portal (ex: PO importa uma vez,
+   todo mundo vê). Mais trabalho de implementação, mas é o comportamento
+   normal de um sistema multiusuário de verdade.
+
+Também não decidimos ainda o formato de entrada dos "Produtos" — se vão
+continuar sendo esses arquivos `.html` com `var DATA=[...]` embutido, ou
+se vão virar telas/formulários dentro do próprio portal.
