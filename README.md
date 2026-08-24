@@ -199,6 +199,20 @@ end;
 $$;
 grant execute on function replace_epics(uuid, jsonb) to authenticated;
 
+-- funções auxiliares "security definer": rodam ignorando RLS, e existem
+-- só pra quebrar a referência circular entre as policies de products e
+-- product_stakeholders (uma pergunta pra outra, que pergunta de volta —
+-- sem essas funções, o Postgres entra em recursão infinita).
+create or replace function is_product_po(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(select 1 from products where id = p_product_id and po_user_id = auth.uid());
+$$;
+
+create or replace function is_product_stakeholder(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(select 1 from product_stakeholders where product_id = p_product_id and user_id = auth.uid());
+$$;
+
 alter table products enable row level security;
 alter table product_stakeholders enable row level security;
 alter table epics enable row level security;
@@ -208,7 +222,7 @@ on products for select
 using (
   is_admin()
   or po_user_id = auth.uid()
-  or exists (select 1 from product_stakeholders ps where ps.product_id = products.id and ps.user_id = auth.uid())
+  or is_product_stakeholder(id)
 );
 
 create policy "admin cria produtos"
@@ -228,7 +242,7 @@ on product_stakeholders for select
 using (
   is_admin()
   or user_id = auth.uid()
-  or exists (select 1 from products p where p.id = product_stakeholders.product_id and p.po_user_id = auth.uid())
+  or is_product_po(product_id)
 );
 
 create policy "admin gerencia atribuições de stakeholder"
@@ -238,23 +252,12 @@ with check ( is_admin() );
 
 create policy "ver épicos de produtos permitidos"
 on epics for select
-using (
-  exists (
-    select 1 from products p
-    where p.id = epics.product_id
-      and (is_admin() or p.po_user_id = auth.uid()
-           or exists (select 1 from product_stakeholders ps where ps.product_id = p.id and ps.user_id = auth.uid()))
-  )
-);
+using ( exists (select 1 from products p where p.id = epics.product_id) );
 
 create policy "admin ou po do produto gerenciam épicos"
 on epics for all
-using (
-  exists (select 1 from products p where p.id = epics.product_id and (is_admin() or p.po_user_id = auth.uid()))
-)
-with check (
-  exists (select 1 from products p where p.id = epics.product_id and (is_admin() or p.po_user_id = auth.uid()))
-);
+using ( is_admin() or is_product_po(product_id) )
+with check ( is_admin() or is_product_po(product_id) );
 ```
 
 6. Com os 3 scripts acima já rodados, abra `setup-admin.html` no navegador e crie o **primeiro administrador** por lá (usuário + senha direto na tela) — ela só funciona antes de existir qualquer admin no portal.
