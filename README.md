@@ -44,6 +44,7 @@ create table profiles (
   id uuid references auth.users on delete cascade primary key,
   nome text,
   role text default 'stakeholder' check (role in ('admin', 'manager', 'po', 'stakeholder')),
+  ativo boolean not null default true, -- desativar = revogar acesso sem apagar a conta
   created_at timestamp with time zone default now()
 );
 
@@ -99,6 +100,45 @@ on profiles for update
 using ( is_admin() )
 with check ( is_admin() );
 
+-- Define o perfil (role) de um usuário. Existe como função (em vez de um
+-- UPDATE direto do navegador) por 2 motivos: só admin pode chamar (checado
+-- aqui dentro, com erro de verdade se não puder — um UPDATE bloqueado por
+-- RLS simplesmente não faz nada e não avisa erro), e porque a tela de criar
+-- usuário troca de sessão internamente (signUp loga como o usuário novo);
+-- fazer a definição do perfil como uma função evita depender de restaurar
+-- a sessão do admin no timing exato certo.
+create or replace function set_user_role(p_user_id uuid, p_role text, p_nome text default null)
+returns void language plpgsql security definer as $$
+begin
+  if not is_admin() then
+    raise exception 'apenas administradores podem definir o perfil de um usuário';
+  end if;
+  if p_role not in ('admin','manager','po','stakeholder') then
+    raise exception 'perfil inválido: %', p_role;
+  end if;
+  update profiles set role = p_role, nome = coalesce(p_nome, nome) where id = p_user_id;
+end;
+$$;
+grant execute on function set_user_role(uuid, text, text) to authenticated;
+
+-- Ativa/desativa o acesso de um usuário. Não existe "excluir conta" de
+-- verdade sem a service_role key (que nunca deve ir pro código do
+-- navegador) — desativar tem o mesmo efeito prático (a pessoa não consegue
+-- mais entrar) sem esse risco.
+create or replace function set_user_ativo(p_user_id uuid, p_ativo boolean)
+returns void language plpgsql security definer as $$
+begin
+  if not is_admin() then
+    raise exception 'apenas administradores podem ativar/desativar usuários';
+  end if;
+  if p_user_id = auth.uid() and p_ativo = false then
+    raise exception 'você não pode desativar sua própria conta';
+  end if;
+  update profiles set ativo = p_ativo where id = p_user_id;
+end;
+$$;
+grant execute on function set_user_ativo(uuid, boolean) to authenticated;
+
 -- quantos admins já existem — usado pela tela de bootstrap (setup-admin.html)
 -- pra saber se ainda pode criar o primeiro. Roda mesmo sem ninguém logado.
 create or replace function admin_count()
@@ -126,13 +166,13 @@ grant execute on function claim_first_admin(text) to authenticated;
 -- acesso"; a TELA de criar usuário em si continua restrita a admin).
 drop function if exists list_users();
 create or replace function list_users()
-returns table(id uuid, email text, role text) language plpgsql security definer as $$
+returns table(id uuid, email text, role text, ativo boolean) language plpgsql security definer as $$
 begin
   if not can_manage() then
     raise exception 'apenas administradores ou managers podem listar usuários';
   end if;
   return query
-    select au.id, au.email::text, coalesce(p.role, 'stakeholder')
+    select au.id, au.email::text, coalesce(p.role, 'stakeholder'), coalesce(p.ativo, true)
     from auth.users au
     left join profiles p on p.id = au.id
     order by au.email;
@@ -388,10 +428,11 @@ extra).
 | **PO** | ❌ | ✅ só o(s) produto(s) dele | ✅ | ❌ |
 | **Stakeholder** | ❌ | ❌ (só visualiza) | ❌ | ❌ |
 
-Hoje, **só o Admin** cria contas de qualquer perfil (tela `admin-usuarios.html` — usuário e senha direto). Vincular um usuário como PO ou Stakeholder de um produto específico é feito por Admin ou Manager, em **Produtos → Gerenciar acesso**.
+Hoje, **só o Admin** cria contas de qualquer perfil, edita o perfil de um usuário já existente e ativa/desativa o acesso dele (tudo em `admin-usuarios.html`). Vincular um usuário como PO ou Stakeholder de um produto específico é feito por Admin ou Manager, em **Produtos → Gerenciar acesso**.
+
+Não existe "excluir conta" de verdade — isso exigiria a `service_role` key do Supabase, que nunca deve aparecer no código do navegador (ela ignora toda regra de segurança do banco). **Desativar** tem o mesmo efeito na prática: a pessoa é deslogada na hora e não consegue mais entrar até ser reativada.
 
 ## Pendências / próximos passos combinados
 
-- Uma tela para o admin trocar o `role` de um usuário já existente (hoje só dá pra fazer isso rodando SQL direto no Supabase, ou recriando a conta).
 - Exigir que o usuário defina/troque a própria senha no primeiro acesso (por enquanto, quem cria a conta já define a senha diretamente).
 - Permitir que Manager também crie contas de PO/Stakeholder (hoje é exclusivo do Admin, por decisão explícita).

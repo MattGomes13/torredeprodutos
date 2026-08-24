@@ -54,6 +54,12 @@ async function initTopbar(loginPath) {
   if (!user) return null;
 
   const perfil = await getPerfil();
+  // Usuário desativado pelo admin: derruba a sessão na hora, em qualquer tela.
+  if (perfil && perfil.ativo === false) {
+    await fazerLogout();
+    window.location.href = loginPath;
+    return null;
+  }
   const nome = (perfil && perfil.nome) ? perfil.nome : user.email;
   const iniciais = nome.trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
