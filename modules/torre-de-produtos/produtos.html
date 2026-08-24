@@ -72,7 +72,8 @@
 <script src="../../assets/js/supabaseClient.js"></script>
 <script src="../../assets/js/auth.js"></script>
 <script>
-var IS_ADMIN = false;
+var IS_ADMIN = false;      // pode gerenciar produtos/acessos (admin OU manager)
+var USER_ROLE = '';        // role real do usuário logado (admin/manager/po/stakeholder)
 var CURRENT_USER = null;
 var USERS_CACHE = null;
 
@@ -117,7 +118,7 @@ async function carregarProdutos(){
   var html = produtos.map(function(p){
     var isPo = p.po_user_id === CURRENT_USER.id;
     var tag = IS_ADMIN
-      ? '<span class="tag admin">Admin — vê tudo</span>'
+      ? '<span class="tag admin">'+(USER_ROLE==='manager'?'Manager':'Admin')+' — vê tudo</span>'
       : (isPo ? '<span class="tag po">Você é o PO</span>' : '<span class="tag view">Você acompanha (visualização)</span>');
     var manageBtn = IS_ADMIN ? '<button onclick="abrirGerenciarAcesso(\''+p.id+'\')">Gerenciar acesso</button>' : '';
     var delBtn = IS_ADMIN ? '<button class="danger" onclick="excluirProduto(\''+p.id+'\','+JSON.stringify(p.name)+')">Excluir</button>' : '';
@@ -206,7 +207,8 @@ async function abrirGerenciarAcesso(productId){
   var ctx = await initTopbar('../../index.html');
   if(!ctx) return;
   CURRENT_USER = ctx.user;
-  IS_ADMIN = !!(ctx.perfil && ctx.perfil.role==='admin');
+  USER_ROLE = (ctx.perfil && ctx.perfil.role) || 'stakeholder';
+  IS_ADMIN = USER_ROLE==='admin' || USER_ROLE==='manager';
   await carregarProdutos();
 })();
 </script>

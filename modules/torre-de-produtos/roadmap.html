@@ -4120,8 +4120,8 @@ document.body.innerHTML='<div style="padding:60px;text-align:center;color:#64748
 return;
 }
 CURRENT_PRODUCT=product;
-var isAdmin=ctx.perfil&&ctx.perfil.role==='admin';
-ACCESS_LEVEL=isAdmin?'admin':(product.po_user_id===ctx.user.id?'po':'view');
+var isAdminOuManager=ctx.perfil&&(ctx.perfil.role==='admin'||ctx.perfil.role==='manager');
+ACCESS_LEVEL=isAdminOuManager?'admin':(product.po_user_id===ctx.user.id?'po':'view');
 if(ACCESS_LEVEL==='view')document.body.classList.add('view-only');
 
 var {data:epicRows}=await supabaseClient.from('epics').select('item').eq('product_id',productId);

@@ -11,11 +11,13 @@
 .tbl-users td{padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border)}
 .role-badge{padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
 .role-badge.admin{background:#fef3c7;color:#b45309}
+.role-badge.manager{background:#ffe4d5;color:#c2410c}
 .role-badge.po{background:#dcfce7;color:#059669}
 .role-badge.stakeholder{background:#e0e7ff;color:#4338ca}
 .new-admin-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:380px;box-shadow:var(--sh)}
 .new-admin-card h3{font-size:14px;color:var(--navy);margin-bottom:4px}
 .new-admin-card p{font-size:11.5px;color:var(--muted);margin-bottom:16px}
+.new-admin-card select{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:var(--bg);font-family:inherit}
 </style>
 </head>
 <body>
@@ -57,14 +59,21 @@
     </table>
 
     <div class="new-admin-card">
-      <h3>Criar novo administrador</h3>
-      <p>Por enquanto, só usuário e senha diretos — depois vamos exigir que a pessoa defina a própria senha no primeiro acesso.</p>
-      <form id="novoAdminForm">
+      <h3>Criar novo usuário</h3>
+      <p>Por enquanto, só o administrador cria contas — usuário e senha diretos. Depois vamos exigir que a pessoa defina a própria senha no primeiro acesso.</p>
+      <form id="novoUsuarioForm">
+        <div class="field"><label>Perfil</label>
+          <select id="na-role">
+            <option value="stakeholder">Stakeholder — só visualiza produtos liberados</option>
+            <option value="manager">Manager — tudo de admin, exceto criar usuários</option>
+            <option value="admin">Admin — acesso total</option>
+          </select>
+        </div>
         <div class="field"><label>Usuário</label><input type="text" id="na-usuario" placeholder="novo.usuario" required></div>
         <div class="field"><label>Senha</label><input type="password" id="na-senha" placeholder="••••••••" required></div>
         <div class="field"><label>Confirmar senha</label><input type="password" id="na-senha2" placeholder="••••••••" required></div>
         <p class="error-msg hide" id="naError"></p>
-        <button class="btn-login" type="submit" id="btnNovoAdmin">Criar administrador</button>
+        <button class="btn-login" type="submit" id="btnNovoUsuario">Criar usuário</button>
       </form>
     </div>
   </div>
@@ -87,13 +96,14 @@ async function carregarUsuarios(){
   }).join('');
 }
 
-document.getElementById('novoAdminForm').addEventListener('submit', async function(e){
+document.getElementById('novoUsuarioForm').addEventListener('submit', async function(e){
   e.preventDefault();
+  var role = document.getElementById('na-role').value;
   var usuario = document.getElementById('na-usuario').value.trim();
   var senha = document.getElementById('na-senha').value;
   var senha2 = document.getElementById('na-senha2').value;
   var erro = document.getElementById('naError');
-  var btn = document.getElementById('btnNovoAdmin');
+  var btn = document.getElementById('btnNovoUsuario');
   erro.classList.add('hide');
 
   if(!usuario){ erro.textContent='Informe um usuário.'; erro.classList.remove('hide'); return; }
@@ -104,7 +114,7 @@ document.getElementById('novoAdminForm').addEventListener('submit', async functi
   try {
     // signUp() troca a sessão ativa do navegador pro usuário recém-criado —
     // por isso guardamos a sessão do admin atual antes, e restauramos depois,
-    // pra quem está criando o novo admin continuar logado como ele mesmo.
+    // pra quem está criando o novo usuário continuar logado como ele mesmo.
     var { data: { session: sessaoAtual } } = await supabaseClient.auth.getSession();
 
     var { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({
@@ -122,24 +132,24 @@ document.getElementById('novoAdminForm').addEventListener('submit', async functi
 
     var { error: updError } = await supabaseClient
       .from('profiles')
-      .update({ role: 'admin', nome: usuario })
+      .update({ role: role, nome: usuario })
       .eq('id', signUpData.user.id);
     if(updError) throw updError;
 
-    document.getElementById('novoAdminForm').reset();
+    document.getElementById('novoUsuarioForm').reset();
     await carregarUsuarios();
   } catch(err){
     erro.textContent = 'Erro: '+err.message;
     erro.classList.remove('hide');
   }
-  btn.disabled = false; btn.textContent = 'Criar administrador';
+  btn.disabled = false; btn.textContent = 'Criar usuário';
 });
 
 (async function init(){
   var ctx = await initTopbar('index.html');
   if(!ctx) return;
   var isAdmin = ctx.perfil && ctx.perfil.role === 'admin';
-  document.getElementById('pageSub').textContent = 'Usuários cadastrados no portal e criação de novos administradores.';
+  document.getElementById('pageSub').textContent = 'Usuários cadastrados no portal e criação de novos administradores, managers e stakeholders.';
   if(!isAdmin){
     document.getElementById('semAcesso').classList.remove('hide');
     return;

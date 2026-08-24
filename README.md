@@ -43,7 +43,7 @@ Cada novo sistema que for integrado vira uma nova pasta dentro de
 create table profiles (
   id uuid references auth.users on delete cascade primary key,
   nome text,
-  role text default 'stakeholder' check (role in ('admin', 'po', 'stakeholder')),
+  role text default 'stakeholder' check (role in ('admin', 'manager', 'po', 'stakeholder')),
   created_at timestamp with time zone default now()
 );
 
@@ -67,13 +67,33 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- função de apoio, usada pelas policies abaixo para checar "é admin?"
+-- funções de apoio, usadas pelas policies abaixo para checar o perfil
 create or replace function is_admin()
 returns boolean language sql stable as $$
   select exists(select 1 from profiles where id = auth.uid() and role = 'admin');
 $$;
 
+create or replace function is_manager()
+returns boolean language sql stable as $$
+  select exists(select 1 from profiles where id = auth.uid() and role = 'manager');
+$$;
+
+create or replace function is_stakeholder()
+returns boolean language sql stable as $$
+  select exists(select 1 from profiles where id = auth.uid() and role = 'stakeholder');
+$$;
+
+-- Manager tem os mesmos poderes de gestão de produtos que o admin — a
+-- única coisa que só o admin pode fazer é criar/editar contas de usuário
+-- (por isso "criar usuário" continua checando is_admin() sozinho, nunca
+-- can_manage()).
+create or replace function can_manage()
+returns boolean language sql stable as $$
+  select is_admin() or is_manager();
+$$;
+
 -- admin pode editar o perfil de qualquer usuário (definir role, nome etc.)
+-- — de propósito só admin, não can_manage(): Manager não cria/edita contas.
 create policy "admin atualiza qualquer perfil"
 on profiles for update
 using ( is_admin() )
@@ -101,14 +121,15 @@ end;
 $$;
 grant execute on function claim_first_admin(text) to authenticated;
 
--- lista usuários (id + e-mail interno + perfil) — só admin consegue chamar.
--- usada em admin-usuarios.html e no "gerenciar acesso" da Torre de Produtos.
+-- lista usuários (id + e-mail interno + perfil) — admin ou manager podem
+-- chamar (o Manager precisa disso pra escolher PO/stakeholder em "Gerenciar
+-- acesso"; a TELA de criar usuário em si continua restrita a admin).
 drop function if exists list_users();
 create or replace function list_users()
 returns table(id uuid, email text, role text) language plpgsql security definer as $$
 begin
-  if not is_admin() then
-    raise exception 'apenas administradores podem listar usuários';
+  if not can_manage() then
+    raise exception 'apenas administradores ou managers podem listar usuários';
   end if;
   return query
     select au.id, au.email::text, coalesce(p.role, 'stakeholder')
@@ -134,21 +155,23 @@ create table hubs (
 
 alter table hubs enable row level security;
 
-create policy "Usuários logados podem ler o hub"
+-- Stakeholder não acessa o Hub (só a área de Produtos, e só pra visualizar).
+-- Todo o resto (admin, manager, po e qualquer outro perfil futuro) pode.
+create policy "Não-stakeholder pode ler o hub"
 on hubs for select
-using ( auth.role() = 'authenticated' );
+using ( auth.role() = 'authenticated' and not is_stakeholder() );
 
-create policy "Usuários logados podem gravar o hub"
+create policy "Não-stakeholder pode gravar o hub"
 on hubs for insert
-with check ( auth.role() = 'authenticated' );
+with check ( auth.role() = 'authenticated' and not is_stakeholder() );
 
-create policy "Usuários logados podem atualizar o hub"
+create policy "Não-stakeholder pode atualizar o hub"
 on hubs for update
-using ( auth.role() = 'authenticated' );
+using ( auth.role() = 'authenticated' and not is_stakeholder() );
 
-create policy "Usuários logados podem apagar o hub"
+create policy "Não-stakeholder pode apagar o hub"
 on hubs for delete
-using ( auth.role() = 'authenticated' );
+using ( auth.role() = 'authenticated' and not is_stakeholder() );
 ```
 
 ### 5.3 Produtos, acessos e épicos
@@ -188,7 +211,7 @@ create table epics (
 create or replace function replace_epics(p_product_id uuid, p_items jsonb)
 returns void language plpgsql as $$
 begin
-  if not (is_admin() or exists(select 1 from products p where p.id=p_product_id and p.po_user_id=auth.uid())) then
+  if not (can_manage() or exists(select 1 from products p where p.id=p_product_id and p.po_user_id=auth.uid())) then
     raise exception 'sem permissão para editar este produto';
   end if;
   delete from epics where product_id = p_product_id;
@@ -220,44 +243,44 @@ alter table epics enable row level security;
 create policy "ver produtos permitidos"
 on products for select
 using (
-  is_admin()
+  can_manage()
   or po_user_id = auth.uid()
   or is_product_stakeholder(id)
 );
 
-create policy "admin cria produtos"
+create policy "admin/manager cria produtos"
 on products for insert
-with check ( is_admin() );
+with check ( can_manage() );
 
-create policy "admin ou po atualizam produto"
+create policy "admin/manager ou po atualizam produto"
 on products for update
-using ( is_admin() or po_user_id = auth.uid() );
+using ( can_manage() or po_user_id = auth.uid() );
 
-create policy "admin exclui produtos"
+create policy "admin/manager exclui produtos"
 on products for delete
-using ( is_admin() );
+using ( can_manage() );
 
 create policy "ver atribuições de stakeholder"
 on product_stakeholders for select
 using (
-  is_admin()
+  can_manage()
   or user_id = auth.uid()
   or is_product_po(product_id)
 );
 
-create policy "admin gerencia atribuições de stakeholder"
+create policy "admin/manager gerencia atribuições de stakeholder"
 on product_stakeholders for all
-using ( is_admin() )
-with check ( is_admin() );
+using ( can_manage() )
+with check ( can_manage() );
 
 create policy "ver épicos de produtos permitidos"
 on epics for select
 using ( exists (select 1 from products p where p.id = epics.product_id) );
 
-create policy "admin ou po do produto gerenciam épicos"
+create policy "admin/manager ou po do produto gerenciam épicos"
 on epics for all
-using ( is_admin() or is_product_po(product_id) )
-with check ( is_admin() or is_product_po(product_id) );
+using ( can_manage() or is_product_po(product_id) )
+with check ( can_manage() or is_product_po(product_id) );
 ```
 
 6. Com os 3 scripts acima já rodados, abra `setup-admin.html` no navegador e crie o **primeiro administrador** por lá (usuário + senha direto na tela) — ela só funciona antes de existir qualquer admin no portal.
@@ -295,14 +318,15 @@ python -m http.server 8000
 
 ## Como funciona o módulo "Torre de Produtos"
 
-- **`home.html`** → escolher entre "Hub de Produtos" e "Produtos".
-- **`hub.html`** → importa `.html` de roadmaps já exportados (de qualquer produto) e monta uma visão consolidada (financeiro, status geral, tabela combinada). Persistido na tabela `hubs`, compartilhado entre todo mundo do portal.
+- **`home.html`** → escolher entre "Hub de Produtos" e "Produtos" (Stakeholder não vê o card do Hub).
+- **`hub.html`** → importa `.html` de roadmaps já exportados (de qualquer produto) e monta uma visão consolidada (financeiro, status geral, tabela combinada). Persistido na tabela `hubs`, compartilhado entre admin/manager/po. **Stakeholder não tem acesso** (nem tela, nem no banco).
 - **`produtos.html`** → mostra os produtos que o usuário logado pode acessar:
-  - **Admin**: vê todos os produtos, pode criar novos e definir quem é o PO e quais stakeholders têm acesso de cada um (botão "Gerenciar acesso").
+  - **Admin e Manager**: veem todos os produtos, podem criar novos e definir quem é o PO e quais stakeholders têm acesso de cada um (botão "Gerenciar acesso"). A única diferença entre os dois é que **só Admin cria/edita contas de usuário**.
   - **PO**: vê só o(s) produto(s) em que é o responsável, com acesso total de edição.
   - **Stakeholder**: vê só os produtos liberados pra ele, em modo **somente leitura**.
-- **`roadmap.html?product=<id>`** → o roadmap completo de 1 produto (o mesmo roadmap "Torre de Produtos" que você já usava localmente: Gantt, visão estratégica/financeira, lista, filtros, exportar Excel/PPT, gestão de layers, white-label, etc.), agora lendo/gravando os épicos na tabela `epics` do Supabase em vez de `localStorage`. PO e admin podem editar; Stakeholder só visualiza (os botões de criar/editar/excluir/importar ficam ocultos, e o Supabase também bloqueia essas ações no banco por segurança, mesmo que alguém tente burlar a tela).
+- **`roadmap.html?product=<id>`** → o roadmap completo de 1 produto (o mesmo roadmap "Torre de Produtos" que você já usava localmente: Gantt, visão estratégica/financeira, lista, filtros, exportar Excel/PPT, gestão de layers, white-label, etc.), agora lendo/gravando os épicos na tabela `epics` do Supabase em vez de `localStorage`. Admin, Manager e PO podem editar; Stakeholder só visualiza (os botões de criar/editar/excluir/importar ficam ocultos, e o Supabase também bloqueia essas ações no banco por segurança, mesmo que alguém tente burlar a tela).
   - Botão **"⬆ Importar"**: sobe um `.html` de roadmap já exportado (como os que você já tinha rodando localmente) e carrega todos os épicos, tipos e layers dele para dentro do produto atual no Supabase — é assim que cada PO migra os dados que já tinha, sem precisar redigitar nada.
+- **`admin-usuarios.html`** → **só Admin** enxerga esta tela. Lista todos os usuários do portal e cria novos, escolhendo o perfil (Admin / Manager / Stakeholder), usuário e senha diretamente.
 
 ## Publicar no GitHub (e deixar online)
 
@@ -355,10 +379,19 @@ extra).
 > essa tela lá em cima. Depois de criado o primeiro admin, pode publicar
 > sem problema.
 
+## Perfis existentes hoje
+
+| Perfil | Cria produtos / gerencia acesso | Edita roadmap | Acessa o Hub | Cria/edita contas de usuário |
+|---|---|---|---|---|
+| **Admin** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ✅ |
+| **Manager** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ❌ |
+| **PO** | ❌ | ✅ só o(s) produto(s) dele | ✅ | ❌ |
+| **Stakeholder** | ❌ | ❌ (só visualiza) | ❌ | ❌ |
+
+Hoje, **só o Admin** cria contas de qualquer perfil (tela `admin-usuarios.html` — usuário e senha direto). Vincular um usuário como PO ou Stakeholder de um produto específico é feito por Admin ou Manager, em **Produtos → Gerenciar acesso**.
+
 ## Pendências / próximos passos combinados
 
-Fica para uma etapa própria (como combinado): a definição fina de **perfis e permissões**. Por enquanto só o perfil **admin** tem telas prontas (bootstrap + criar outros admins); o esquema já suporta PO e Stakeholder (tabela `profiles.role`, `products.po_user_id`, `product_stakeholders`), mas ainda faltam:
-- Uma tela para criar usuários PO/Stakeholder direto do portal (hoje precisa rodar SQL/usar o painel do Supabase pra criar a conta e depois pode usar "Gerenciar acesso" em Produtos pra vincular a um produto).
-- Uma tela para o admin trocar o `role` de um usuário já existente (hoje só dá pra fazer isso rodando SQL direto no Supabase).
+- Uma tela para o admin trocar o `role` de um usuário já existente (hoje só dá pra fazer isso rodando SQL direto no Supabase, ou recriando a conta).
 - Exigir que o usuário defina/troque a própria senha no primeiro acesso (por enquanto, quem cria a conta já define a senha diretamente).
-- O Hub (`hub.html`) hoje aceita salvar/apagar de **qualquer usuário logado** (não só admin/PO) — revisar se isso deve virar restrito também.
+- Permitir que Manager também crie contas de PO/Stakeholder (hoje é exclusivo do Admin, por decisão explícita).

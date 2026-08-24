@@ -1189,7 +1189,13 @@ render();
 })();
 
 // Integração com o portal: protege a página e preenche usuário/logout.
-initTopbar('../../index.html');
+// Stakeholder não tem acesso ao Hub (só à área de Produtos, e só visualização).
+initTopbar('../../index.html').then(function(ctx){
+  if(ctx && ctx.perfil && ctx.perfil.role === 'stakeholder'){
+    document.body.innerHTML = '<div style="padding:60px;text-align:center;color:#64748b;font-family:Segoe UI,sans-serif">'+
+      'Você não tem acesso ao Hub de Produtos. <a href="home.html">Voltar</a></div>';
+  }
+});
 </script>
 </body>
 </html>
