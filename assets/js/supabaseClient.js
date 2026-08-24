@@ -7,7 +7,7 @@
 // Security (RLS) configuradas no banco, não do sigilo dessa chave.
 // Por isso ela pode ficar aqui no código sem problema.
 
-const SUPABASE_URL = "COLE_AQUI_A_URL_DO_SEU_PROJETO_SUPABASE";
-const SUPABASE_ANON_KEY = "COLE_AQUI_A_ANON_KEY_DO_SEU_PROJETO_SUPABASE";
+const SUPABASE_URL = "https://ngnpqjocaptjeahseyqv.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_AdjBGcxo_J2q-TBs-5bC7A_EUYQa4d8";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
