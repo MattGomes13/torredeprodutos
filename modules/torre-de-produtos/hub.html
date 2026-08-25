@@ -215,10 +215,10 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
     <span class="hub-backlink" onclick="window.location.href='home.html'">← Voltar</span>
     <div class="eyebrow">Torre de controle · Portfólio 2026</div>
     <h1>Roadmaps consolidados</h1>
-    <div class="sub" id="subtxt">Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Os dados ficam salvos no Supabase e são compartilhados com todos que acessam o portal.</div>
+    <div class="sub" id="subtxt">Sincronizado automaticamente com os produtos e roadmaps do portal.</div>
   </div>
   <div class="topbar-actions">
-    <button class="tb-btn" id="saveBtn" onclick="saveHub(true)" title="Salva a importação atual no Supabase — todo mundo que acessar o portal vê a mesma versão">✓ Tudo salvo</button>
+    <button class="tb-btn" id="refreshBtn" onclick="atualizarDados(true)" title="Busca de novo os dados mais recentes de Produtos">🔄 Atualizar</button>
     <button class="tb-btn tb-btn-outline" onclick="exportHub()" title="Gera um arquivo .html com a versão atual para enviar a outra pessoa">⇩ Exportar</button>
     <div class="clock">
       <b id="clockTime">--:--:--</b>
@@ -233,20 +233,11 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
 </div></div>
 
 <div class="shell bodypad">
-  <label class="dz" id="dz" for="fileInput">
-    <div class="dz-icon">⇪</div>
-    <div class="dz-txt">
-      <b>Arraste os arquivos exportados aqui, ou clique para selecionar</b>
-      <span>Aceita múltiplos .html de uma vez — BankManager, Luna, Net Finanças, PIS, ou qualquer outro roadmap gerado no mesmo padrão</span>
-    </div>
-    <input type="file" id="fileInput" accept=".html,.htm" multiple>
-  </label>
-
   <div class="rail" id="rail"></div>
 
   <div id="dashArea"></div>
 
-  <footer>DADOS SALVOS NO SUPABASE · COMPARTILHADO COM TODOS OS ACESSOS AO PORTAL · v1.2</footer>
+  <footer>DADOS AO VIVO DE PRODUTOS · SINCRONIZADO COM O SUPABASE · v2.0</footer>
 </div>
 
 
@@ -287,157 +278,65 @@ function tickClock(){
 tickClock(); setInterval(tickClock,1000);
 
 /* ============================================================
-   FILE PARSING
+   SINCRONIZAÇÃO COM PRODUTOS (ao vivo, direto do Supabase)
    ============================================================ */
-// Finds the character index right after the JSON value that starts at
-// html[startIdx] (which must be '[' or '{'), by counting bracket depth
-// while correctly skipping over the contents of JSON strings (including
-// escaped quotes and escaped backslashes). This is needed because a naive
-// regex like /var DATA=(\[[\s\S]*?\]);/ stops at the FIRST "];" it finds —
-// and roadmap files embed their own import/export code as source text
-// (e.g. a line containing the literal string "var DATA=(\\[[\\s\\S]*?\\]);"
-// inside a JS regex-as-string), which can confuse a naive non-greedy match.
-function findJsonValueEnd(html, startIdx){
-  var openChar = html[startIdx];
-  var closeChar = openChar === '[' ? ']' : '}';
-  var depth = 0;
-  var inString = false;
-  for(var i = startIdx; i < html.length; i++){
-    var ch = html[i];
-    if(inString){
-      if(ch === '\\'){ i++; continue; } // skip escaped char
-      if(ch === '"') inString = false;
-      continue;
-    }
-    if(ch === '"'){ inString = true; continue; }
-    if(ch === openChar) depth++;
-    else if(ch === closeChar){
-      depth--;
-      if(depth === 0) return i + 1; // index right after the closing bracket
-    }
+// Busca os produtos e épicos direto do Supabase (mesma fonte de dados do
+// roadmap.html) — é assim que o Hub fica sempre sincronizado: não existe
+// mais "importar", os dados aqui SÃO os dados reais de Produtos, ao vivo.
+// O RLS do banco já filtra sozinho: admin/manager veem todos os produtos,
+// PO só vê o(s) produto(s) dele.
+async function atualizarDados(mostrarToast){
+  var { data: prods, error } = await supabaseClient.from('products').select('*').order('created_at');
+  if(error){ showToast('Erro ao carregar produtos: '+error.message, 'err'); return; }
+  prods = prods || [];
+
+  var ids = prods.map(function(p){ return p.id; });
+  var epicsByProduct = {};
+  if(ids.length){
+    var { data: epicRows } = await supabaseClient.from('epics').select('product_id,item').in('product_id', ids);
+    (epicRows||[]).forEach(function(r){
+      if(!epicsByProduct[r.product_id]) epicsByProduct[r.product_id] = [];
+      epicsByProduct[r.product_id].push(r.item);
+    });
   }
-  return -1; // unbalanced / not found
-}
-// Scans the whole document for every occurrence of "var <varName>=" followed
-// by openChar, extracts each candidate JSON value via bracket-matching, and
-// returns the first one that (a) parses as valid JSON and (b) is a non-empty
-// array/object. This way, even if a file has decoy text elsewhere that looks
-// like "var DATA=", we skip anything that doesn't actually parse or is empty,
-// and land on the real data.
-function extractByVarName(html, varName, openChar){
-  var closeChar = openChar === '[' ? ']' : '}';
-  var searchFrom = 0;
-  var needle = 'var ' + varName;
-  while(true){
-    var nameIdx = html.indexOf(needle, searchFrom);
-    if(nameIdx === -1) break;
-    // must be followed (after optional whitespace and '=') by the open char
-    var afterName = nameIdx + needle.length;
-    var eqIdx = html.indexOf('=', afterName);
-    if(eqIdx === -1 || eqIdx - afterName > 5){ searchFrom = nameIdx + needle.length; continue; }
-    var between = html.slice(afterName, eqIdx);
-    if(/[^\s]/.test(between)){ searchFrom = nameIdx + needle.length; continue; } // not exactly "var DATA ... =", e.g. "var DATA2="
-    var valStart = eqIdx + 1;
-    while(valStart < html.length && /\s/.test(html[valStart])) valStart++;
-    if(html[valStart] !== openChar){ searchFrom = nameIdx + needle.length; continue; }
 
-    var valEnd = findJsonValueEnd(html, valStart);
-    if(valEnd !== -1){
-      var candidate = html.slice(valStart, valEnd);
-      try {
-        var parsed = JSON.parse(candidate);
-        var isNonEmpty = openChar === '[' ? (Array.isArray(parsed) && parsed.length > 0) : (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0);
-        if(isNonEmpty) return parsed;
-      } catch(e){ /* not valid JSON here, keep scanning */ }
-    }
-    searchFrom = nameIdx + needle.length;
-  }
-  return null;
-}
-function extractField(html, varName){
-  return extractByVarName(html, varName, '[');
-}
-function extractObjField(html, varName){
-  return extractByVarName(html, varName, '{');
-}
-function extractProjectName(html){
-  // The <head><title> is always the first <title> tag in a well-formed document;
-  // later matches can come from embedded library strings, so only look inside <head>.
-  var headEnd = html.indexOf('</head>');
-  var headHtml = headEnd > -1 ? html.slice(0, headEnd) : html.slice(0, 2000);
-  var m = headHtml.match(/<title>([^<]*)<\/title>/);
-  if(m && m[1]){
-    var t = m[1].replace(/^Roadmap\s*/i,'').trim();
-    if(t) return t;
-  }
-  return null;
-}
-function extractProjectNameFromBrand(html){
-  var m = html.match(/class="brand-title"[^>]*>([^<]*)</);
-  if(m && m[1]){
-    var t = m[1].replace(/ROADMAP ESTRATEGICO\s*–\s*/i,'').replace(/\s*\d{4}\s*$/,'').trim();
-    if(t && t.toUpperCase() !== 'BANKMANAGER') return t;
-  }
-  return null;
-}
+  // Resolve o e-mail do PO de cada produto — só funciona pra quem pode
+  // chamar list_users() (admin/manager); se um PO abrir o Hub, essa
+  // chamada falha silenciosamente e o nome do PO simplesmente não aparece.
+  var usersMap = {};
+  try{
+    var { data: users } = await supabaseClient.rpc('list_users');
+    (users||[]).forEach(function(u){ usersMap[u.id] = u.email; });
+  }catch(e){ /* sem permissão de listar usuários — sem problema */ }
 
-function handleFiles(fileList){
-  var files = Array.prototype.slice.call(fileList);
-  var pending = files.length;
-  if(!pending) return;
-  files.forEach(function(file){
-    var reader = new FileReader();
-    reader.onload = function(e){
-      var html = e.target.result;
-      var data = extractField(html, 'DATA');
-      if(!data){
-        showToast('Não encontrei dados de roadmap em "'+file.name+'"', 'err');
-        pending--; if(pending===0) render();
-        return;
-      }
-      var types = extractObjField(html, 'TYPES') || {};
-      // Prefer <title> (set once at export time and not overwritten by template leftovers);
-      // fall back to the on-page brand title, then to the filename itself.
-      var name = extractProjectName(html) || extractProjectNameFromBrand(html) || file.name.replace(/\.html?$/i,'');
-      var key = name.toLowerCase().replace(/[^a-z0-9]+/g,'_');
-
-      var color = (PRODUCTS[key] && PRODUCTS[key].color) || PALETTE[paletteIdx % PALETTE.length];
-      if(!PRODUCTS[key]) paletteIdx++;
-
-      var isNew = !PRODUCTS[key];
-
-      PRODUCTS[key] = {
-        name: (PRODUCTS[key] && PRODUCTS[key].customName) ? PRODUCTS[key].name : name,
-        customName: (PRODUCTS[key] && PRODUCTS[key].customName) || false,
-        color: color,
-        data: data,
-        types: types,
-        visible: (PRODUCTS[key] ? PRODUCTS[key].visible : true),
-        fileName: file.name,
-        loadedAt: new Date()
-      };
-      if(isNew) PRODUCT_ORDER.push(key);
-      pending--;
-      if(pending===0){ render(); markDirty(); showToast(files.length+' arquivo(s) processado(s)', 'ok'); }
+  var novoProducts = {};
+  var novaOrdem = [];
+  prods.forEach(function(p, idx){
+    var key = p.id;
+    var corSalva = p.config && p.config.theme && p.config.theme.primary;
+    var color = corSalva || (PRODUCTS[key] && PRODUCTS[key].color) || PALETTE[idx % PALETTE.length];
+    novoProducts[key] = {
+      name: p.name,
+      color: color,
+      data: epicsByProduct[p.id] || [],
+      types: {},
+      visible: PRODUCTS[key] ? PRODUCTS[key].visible : true,
+      poName: p.po_user_id ? (usersMap[p.po_user_id] || 'PO definido') : '',
+      productId: p.id
     };
-    reader.onerror = function(){
-      pending--; if(pending===0) render();
-    };
-    reader.readAsText(file, 'UTF-8');
+    novaOrdem.push(key);
   });
-}
 
-document.getElementById('fileInput').addEventListener('change', function(e){
-  handleFiles(e.target.files);
-  e.target.value = '';
-});
-var dz = document.getElementById('dz');
-dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.classList.add('drag'); });
-dz.addEventListener('dragleave', function(){ dz.classList.remove('drag'); });
-dz.addEventListener('drop', function(e){
-  e.preventDefault(); dz.classList.remove('drag');
-  handleFiles(e.dataTransfer.files);
-});
+  // preserva a ordem que já estava na tela (arrastada manualmente nesta
+  // sessão), só adicionando produtos novos no fim
+  var ordemAtual = PRODUCT_ORDER.filter(function(k){ return novoProducts[k]; });
+  novaOrdem.forEach(function(k){ if(ordemAtual.indexOf(k) === -1) ordemAtual.push(k); });
+
+  PRODUCTS = novoProducts;
+  PRODUCT_ORDER = ordemAtual;
+  render();
+  if(mostrarToast) showToast(prods.length+' produto(s) sincronizado(s)', 'ok');
+}
 
 /* ============================================================
    TOAST
@@ -470,71 +369,13 @@ function allVisibleData(){
   });
   return arr;
 }
-function removeProduct(key){
-  var name = PRODUCTS[key] ? PRODUCTS[key].name : key;
-  if(!confirm('Excluir "'+name+'" definitivamente?\n\nIsso remove o produto e todos os seus épicos da Torre de Controle agora — não é um "ocultar", os dados saem da tela e da memória. Para trazê-lo de volta depois, basta subir o arquivo .html exportado novamente.')) return;
-  delete PRODUCTS[key];
-  PRODUCT_ORDER = PRODUCT_ORDER.filter(function(k){ return k!==key; });
-  if(VIEW === key) VIEW = 'estrategica';
-  render();
-  markDirty();
-  showToast('"'+name+'" excluído', 'ok');
-}
+// "Excluir" um produto de verdade agora é uma ação de Produtos (mexe no
+// banco de verdade) — aqui no Hub só resta ocultar da visão consolidada,
+// que é exatamente o que toggleProduct já faz ao clicar no card.
 function toggleProduct(key){
   PRODUCTS[key].visible = !PRODUCTS[key].visible;
+  if(VIEW === key && !PRODUCTS[key].visible) VIEW = 'estrategica';
   render();
-  markDirty();
-}
-function startRename(key, evt){
-  evt.stopPropagation();
-  var nameEl = document.getElementById('pcname_'+key);
-  var current = PRODUCTS[key].name;
-  var input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'pc-name-input';
-  input.value = current;
-  nameEl.replaceWith(input);
-  input.focus();
-  input.select();
-  function commit(){
-    var v = input.value.trim();
-    if(v){
-      PRODUCTS[key].name = v;
-      PRODUCTS[key].customName = true;
-    }
-    render();
-    markDirty();
-  }
-  input.addEventListener('click', function(e){ e.stopPropagation(); });
-  input.addEventListener('keydown', function(e){
-    if(e.key === 'Enter') commit();
-    if(e.key === 'Escape') render();
-  });
-  input.addEventListener('blur', commit);
-}
-function startEditPO(key, evt){
-  evt.stopPropagation();
-  var poEl = document.getElementById('pcpo_'+key);
-  var current = PRODUCTS[key].poName || '';
-  var input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'pc-po-input';
-  input.value = current;
-  input.placeholder = 'Nome do PO';
-  poEl.replaceWith(input);
-  input.focus();
-  input.select();
-  function commit(){
-    PRODUCTS[key].poName = input.value.trim();
-    render();
-    markDirty();
-  }
-  input.addEventListener('click', function(e){ e.stopPropagation(); });
-  input.addEventListener('keydown', function(e){
-    if(e.key === 'Enter') commit();
-    if(e.key === 'Escape') render();
-  });
-  input.addEventListener('blur', commit);
 }
 
 /* ============================================================
@@ -572,7 +413,6 @@ function onDropCard(key, evt){
   PRODUCT_ORDER.splice(to,0,DRAG_KEY);
   DRAG_KEY = null;
   render();
-  markDirty();
 }
 
 /* ============================================================
@@ -607,29 +447,24 @@ function renderRail(){
       'draggable="true" '+
       'ondragstart="onDragStart(\''+key+'\',event)" ondragend="onDragEnd()" '+
       'ondragover="onDragOverCard(\''+key+'\',event)" ondragleave="onDragLeaveCard(event)" ondrop="onDropCard(\''+key+'\',event)" '+
-      'onclick="toggleProduct(\''+key+'\')">'+
+      'onclick="toggleProduct(\''+key+'\')" title="Clique pra mostrar/ocultar deste painel">'+
       '<div class="pc-drag" title="Arraste para reordenar">⋮⋮</div>'+
-      '<button class="pc-x" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();removeProduct(\''+key+'\')" title="Excluir este roadmap">✕</button>'+
       '<div class="pc-top">'+
-        '<div><div class="pc-name" id="pcname_'+key+'" onclick="startRename(\''+key+'\',event)">'+p.name+'<span class="pc-name-edit">✎</span></div><div class="pc-sub">'+p.fileName.replace('.html','')+'</div></div>'+
+        '<div><div class="pc-name" id="pcname_'+key+'">'+p.name+'</div></div>'+
         '<div class="pc-toggle"></div>'+
       '</div>'+
       '<div class="pc-count">'+total+'</div>'+
-      '<div class="pc-count-lbl">épicos carregados</div>'+
-      '<div class="pc-po" id="pcpo_'+key+'" onclick="startEditPO(\''+key+'\',event)">'+
-        '<span class="pc-po-ic">👤</span>'+(p.poName ? p.poName : '<span class="pc-po-empty">Definir PO</span>')+
+      '<div class="pc-count-lbl">épicos</div>'+
+      '<div class="pc-po" id="pcpo_'+key+'">'+
+        '<span class="pc-po-ic">👤</span>'+(p.poName ? p.poName : '<span class="pc-po-empty">PO não definido</span>')+
       '</div>'+
       '<div class="pc-bar">'+barSegs+'</div>'+
       (p.visible?'<button class="pc-view-btn" onclick="event.stopPropagation();setView(\''+key+'\')">Ver individual →</button>':'')+
     '</div>';
   });
 
-  // Empty slots hint
-  if(keys.length < 4){
-    var remaining = 4 - keys.length;
-    for(var i=0;i<remaining;i++){
-      html += '<div class="pcard empty"><div class="pc-empty-txt">Aguardando upload<br><b>arquivo '+(keys.length+i+1)+'</b></div></div>';
-    }
+  if(keys.length === 0){
+    html = '<div class="pcard empty" style="grid-column:1/-1"><div class="pc-empty-txt">Nenhum produto encontrado. Crie um em <b>Produtos</b> pra ele aparecer aqui automaticamente.</div></div>';
   }
 
   rail.innerHTML = html;
@@ -663,14 +498,14 @@ function render(){
   if(Object.keys(PRODUCTS).length === 0){
     area.innerHTML = '<div class="empty-state">'+
       '<div class="ic">◈</div>'+
-      '<h3>Nenhum roadmap carregado</h3>'+
-      '<p>Envie os arquivos HTML exportados de cada sistema (BankManager, Luna, Net Finanças, PIS...) para ver o painel consolidado, os totalizadores por produto e a tabela combinada de épicos.</p>'+
+      '<h3>Nenhum produto encontrado</h3>'+
+      '<p>Assim que um produto for criado em <b>Produtos</b> e tiver épicos no roadmap, ele aparece aqui automaticamente — não precisa importar nada.</p>'+
     '</div>';
-    document.getElementById('subtxt').textContent = 'Carregue os arquivos HTML exportados de cada roadmap para montar o painel agregado. Os dados ficam salvos no Supabase e são compartilhados com todos que acessam o portal.';
+    document.getElementById('subtxt').textContent = 'Sincronizado automaticamente com os produtos e roadmaps do portal.';
     return;
   }
 
-  document.getElementById('subtxt').textContent = Object.keys(PRODUCTS).length+' produto(s) carregado(s) · '+visibleKeys.length+' visível(is) no painel';
+  document.getElementById('subtxt').textContent = Object.keys(PRODUCTS).length+' produto(s) · '+visibleKeys.length+' visível(is) no painel';
 
   // Fall back to estratégica if the view points to a hidden/removed product
   if(VIEW !== 'estrategica' && VIEW !== 'acompanhamento' && visibleKeys.indexOf(VIEW) === -1) VIEW = 'estrategica';
@@ -737,7 +572,7 @@ function renderProdutoIndividual(area, tabsHtml, key){
     '<div class="sec-hdr"><h2 style="color:'+p.color+'">'+p.name+'</h2><div class="sec-line"></div>'+
       (p.poName ? '<span class="cnt" style="font-weight:700;color:var(--text)">PO: '+p.poName+'</span>' : '')+
       '<span class="cnt">'+all.length+' épicos</span>'+
-      '<button class="btn-danger-ghost" onclick="removeProduct(\''+key+'\')">Excluir este produto</button>'+
+      '<a class="btn-danger-ghost" style="text-decoration:none;display:inline-block" href="roadmap.html?product='+key+'">Abrir roadmap completo →</a>'+
     '</div>'+
     '<div class="totals" id="totalsRow"></div>'+
     '<div class="sec-hdr"><h2>Distribuição</h2><div class="sec-line"></div></div>'+
@@ -1063,81 +898,13 @@ function renderTableForProduct(key){
 }
 
 /* ============================================================
-   PERSISTENCE (save/load the whole hub state in Supabase — a única
-   linha da tabela "hubs", compartilhada por todo mundo que acessa o portal)
-   ============================================================ */
-var HUB_TABLE = 'hubs';
-var HUB_ROW_ID = 'torre-de-produtos';
-var DIRTY = false; // true = there are unsaved changes since last save/load
-
-function markDirty(){
-  DIRTY = true;
-  updateSaveIndicator();
-}
-function updateSaveIndicator(){
-  var btn = document.getElementById('saveBtn');
-  if(!btn) return;
-  if(DIRTY){
-    btn.classList.add('dirty');
-    btn.textContent = '● Salvar alterações';
-  } else {
-    btn.classList.remove('dirty');
-    btn.textContent = '✓ Tudo salvo';
-  }
-}
-async function saveHub(showMsg){
-  try {
-    var user = await getUsuarioLogado();
-    var payload = {
-      id: HUB_ROW_ID,
-      version: 1,
-      products: PRODUCTS,
-      product_order: PRODUCT_ORDER,
-      updated_at: new Date().toISOString(),
-      updated_by: user ? user.id : null
-    };
-    var { error } = await supabaseClient.from(HUB_TABLE).upsert(payload);
-    if(error) throw error;
-    DIRTY = false;
-    updateSaveIndicator();
-    if(showMsg) showToast('Torre de Controle salva no Supabase', 'ok');
-    return true;
-  } catch(e){
-    if(showMsg) showToast('Não foi possível salvar (verifique sua conexão ou as permissões no Supabase)', 'err');
-    return false;
-  }
-}
-async function loadHub(){
-  try {
-    var { data, error } = await supabaseClient.from(HUB_TABLE).select('*').eq('id', HUB_ROW_ID).maybeSingle();
-    if(error || !data || !data.products || !data.product_order) return false;
-    PRODUCTS = data.products;
-    PRODUCT_ORDER = data.product_order;
-    // recompute paletteIdx so newly-added products after a reload get a fresh color
-    paletteIdx = PRODUCT_ORDER.length;
-    return true;
-  } catch(e){
-    return false;
-  }
-}
-async function clearSavedHub(){
-  if(!confirm('Apagar os dados salvos da Torre de Controle no Supabase?\n\nIsso afeta todo mundo que acessa o portal — os roadmaps carregados agora na tela continuam visíveis até você recarregar a página, mas ninguém mais vai ver esses dados depois disso.')) return;
-  try { await supabaseClient.from(HUB_TABLE).delete().eq('id', HUB_ROW_ID); } catch(e){}
-  showToast('Dados salvos apagados', 'ok');
-  markDirty();
-}
-
-/* ============================================================
    EXPORT (produce a standalone HTML snapshot to share)
    ============================================================ */
-async function exportHub(){
+function exportHub(){
   if(Object.keys(PRODUCTS).length === 0){
-    showToast('Nada para exportar ainda — carregue ao menos um roadmap', 'err');
+    showToast('Nada para exportar ainda', 'err');
     return;
   }
-  // Save current state first so the exported snapshot matches what's on screen
-  await saveHub(false);
-
   var payload = {
     version: 1,
     savedAt: new Date().toISOString(),
@@ -1168,34 +935,22 @@ async function exportHub(){
 }
 
 render();
-// Try to restore the shared state from Supabase; if found, re-render with it.
-(async function initHubData(){
-  var restored = await loadHub();
-  if(restored){
-    render();
-    updateSaveIndicator();
-    showToast('Torre de Controle restaurada do Supabase', 'ok');
-  } else if(window.__HUB_SNAPSHOT__ && window.__HUB_SNAPSHOT__.products){
-    // This file was opened as an exported snapshot from someone else — load it directly.
-    PRODUCTS = window.__HUB_SNAPSHOT__.products;
-    PRODUCT_ORDER = window.__HUB_SNAPSHOT__.order || Object.keys(PRODUCTS);
-    paletteIdx = PRODUCT_ORDER.length;
-    render();
-    updateSaveIndicator();
-    showToast('Exibindo versão recebida por arquivo — clique em Salvar para gravar no Supabase também', 'ok');
-  } else {
-    updateSaveIndicator();
-  }
-})();
 
-// Integração com o portal: protege a página e preenche usuário/logout.
-// Stakeholder não tem acesso ao Hub (só à área de Produtos, e só visualização).
-initTopbar('../../index.html').then(function(ctx){
-  if(ctx && ctx.perfil && ctx.perfil.role === 'stakeholder'){
+// Integração com o portal: protege a página, preenche usuário/logout e —
+// se não for stakeholder (que não acessa o Hub) — já busca os dados reais
+// de Produtos assim que a sessão é confirmada.
+(async function initHub(){
+  var ctx = await initTopbar('../../index.html');
+  if(!ctx) return; // sem sessão — já foi redirecionado pro login
+
+  if(ctx.perfil && ctx.perfil.role === 'stakeholder'){
     document.body.innerHTML = '<div style="padding:60px;text-align:center;color:#64748b;font-family:Segoe UI,sans-serif">'+
       'Você não tem acesso ao Hub de Produtos. <a href="home.html">Voltar</a></div>';
+    return;
   }
-});
+
+  await atualizarDados(false);
+})();
 </script>
 </body>
 </html>

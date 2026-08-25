@@ -22,7 +22,7 @@ portal-sistemas/
 ├── modules/
 │   └── torre-de-produtos/    → 1º sistema integrado
 │       ├── home.html         → escolha entre "Hub" e "Produtos"
-│       ├── hub.html          → visão macro consolidada (importa roadmaps exportados)
+│       ├── hub.html          → visão macro consolidada, sincronizada ao vivo com Produtos
 │       ├── produtos.html     → lista de produtos do usuário (ou gestão, se admin)
 │       └── roadmap.html      → roadmap completo de 1 produto (Gantt, financeiro, etc.)
 └── README.md
@@ -207,6 +207,12 @@ grant execute on function list_users() to authenticated;
 
 ### 5.2 Hub de Produtos (visão consolidada)
 
+> ℹ️ Esta tabela `hubs` era usada numa versão anterior do Hub, baseada em
+> upload manual de arquivos. Hoje o Hub busca tudo ao vivo das tabelas
+> `products`/`epics` (seção 5.3), e não usa mais essa tabela. Deixamos o
+> script aqui só por compatibilidade com quem já rodou antes — **pode
+> pular esse bloco** em uma instalação nova.
+
 ```sql
 create table hubs (
   id text primary key,
@@ -383,7 +389,7 @@ python -m http.server 8000
 ## Como funciona o módulo "Torre de Produtos"
 
 - **`home.html`** → escolher entre "Hub de Produtos" e "Produtos" (Stakeholder não vê o card do Hub).
-- **`hub.html`** → importa `.html` de roadmaps já exportados (de qualquer produto) e monta uma visão consolidada (financeiro, status geral, tabela combinada). Persistido na tabela `hubs`, compartilhado entre admin/manager/po. **Stakeholder não tem acesso** (nem tela, nem no banco).
+- **`hub.html`** → busca os produtos e épicos **direto do Supabase** (as mesmas tabelas `products`/`epics` que `roadmap.html` usa) e monta uma visão consolidada (financeiro, status geral, tabela combinada). Não existe mais upload/importação manual — qualquer produto criado, ou roadmap atualizado, em Produtos aparece aqui automaticamente na próxima vez que a tela carrega (ou clicando em "🔄 Atualizar"). Quem acessa vê só os produtos que o RLS já libera pra ele (admin/manager: todos; PO: só o(s) dele). **Stakeholder não tem acesso** (nem tela). A tabela `hubs` (usada numa versão anterior, baseada em upload) ficou sem uso — pode ser removida do banco se quiser, não afeta nada.
 - **`produtos.html`** → mostra os produtos que o usuário logado pode acessar:
   - **Admin e Manager**: veem todos os produtos, podem criar novos e definir quem é o PO e quais stakeholders têm acesso de cada um (botão "Gerenciar acesso"). A única diferença entre os dois é que **só Admin cria/edita contas de usuário**.
   - **PO**: vê só o(s) produto(s) em que é o responsável, com acesso total de edição.
