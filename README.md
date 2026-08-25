@@ -11,12 +11,14 @@ portal-sistemas/
 ├── index.html               → tela de login (global, vale para todos os sistemas)
 ├── setup-admin.html         → bootstrap: cria o 1º administrador do portal (só funciona 1 vez)
 ├── dashboard.html           → lista os sistemas que o usuário pode acessar
-├── admin-usuarios.html      → (admin) lista usuários e cria novos administradores
+├── admin-usuarios.html      → (admin/manager) lista usuários, cria/edita perfis, redefine senha
 ├── assets/
 │   ├── css/style.css         → estilo visual compartilhado por todo o portal
 │   └── js/
 │       ├── supabaseClient.js → configuração da conexão com o Supabase
 │       └── auth.js           → login, logout, sessão e checagem de perfil
+├── supabase/functions/
+│   └── admin-reset-password/ → Edge Function: redefine a senha de outro usuário (precisa da service_role key, por isso roda no servidor do Supabase, não no navegador)
 ├── modules/
 │   └── torre-de-produtos/    → 1º sistema integrado
 │       ├── home.html         → escolha entre "Hub" e "Produtos"
@@ -458,6 +460,29 @@ extra).
 - Criar um usuário como **PO exige marcar pelo menos 1 produto** na hora da criação.
 
 Não existe "excluir conta" de verdade — isso exigiria a `service_role` key do Supabase, que nunca deve aparecer no código do navegador (ela ignora toda regra de segurança do banco). **Desativar** tem o mesmo efeito na prática: a pessoa é deslogada na hora e não consegue mais entrar até ser reativada.
+
+## Redefinir a senha de um usuário (Edge Function)
+
+Botão **"Nova senha"** na tela de Administração — mesma regra de quem pode
+usar: Admin em qualquer conta, Manager só em PO/Stakeholder. Ninguém troca
+a própria senha por aqui.
+
+Diferente do resto do projeto (que é só front-end + SQL), essa ação
+**exige** rodar código no servidor do Supabase, porque trocar a senha de
+**outra pessoa** só é possível com a Admin API do Supabase, que só
+funciona com a `service_role` key — impossível de fazer com segurança
+direto do navegador. A função já está pronta em
+[`supabase/functions/admin-reset-password/index.ts`](supabase/functions/admin-reset-password/index.ts);
+falta só publicá-la no seu projeto (uma vez só, não precisa repetir depois):
+
+1. No painel do Supabase, vá em **Edge Functions** (menu lateral) → **Deploy a new function** (ou "Create a function").
+2. Dê o nome exatamente **`admin-reset-password`** (o nome tem que bater com o que o portal chama).
+3. Cole o conteúdo do arquivo `supabase/functions/admin-reset-password/index.ts` no editor que abrir.
+4. Clique em **Deploy**.
+
+Não precisa configurar nenhuma chave/segredo manualmente — o Supabase já
+injeta a URL do projeto e a `service_role` key automaticamente dentro de
+toda Edge Function, sem elas nunca saírem do lado do servidor.
 
 ## Pendências / próximos passos combinados
 

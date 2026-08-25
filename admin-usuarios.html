@@ -213,6 +213,11 @@ async function carregarUsuarios(){
       : (editavel
           ? '<button onclick="alternarAtivo(\''+u.id+'\','+(!ativo)+')" class="'+(ativo?'danger':'')+'">'+(ativo?'Desativar':'Reativar')+'</button>'
           : '<button disabled title="Sem permissão para gerenciar este usuário">Desativar</button>');
+    var senhaBtn = souEu
+      ? '<button disabled title="Troque a sua própria senha pela tela de login">Nova senha</button>'
+      : (editavel
+          ? '<button onclick="'+onclickAttr('redefinirSenha('+jsStr(u.id)+','+jsStr(u.email)+')')+'">Nova senha</button>'
+          : '<button disabled title="Sem permissão para gerenciar este usuário">Nova senha</button>');
 
     return '<tr id="row-'+u.id+'">'+
       '<td>'+u.email+(souEu?' <span style="color:var(--dim);font-size:10px">(você)</span>':'')+'</td>'+
@@ -220,7 +225,7 @@ async function carregarUsuarios(){
       '<td><span class="status-badge '+(ativo?'ativo':'inativo')+'">'+(ativo?'ativo':'inativo')+'</span></td>'+
       '<td style="color:var(--muted)">'+formatarData(u.ultimo_login)+'</td>'+
       '<td>'+produtosCell+'</td>'+
-      '<td class="row-actions">'+acaoBtn+'</td>'+
+      '<td class="row-actions">'+acaoBtn+senhaBtn+'</td>'+
     '</tr>';
   }).join('');
 }
@@ -239,6 +244,22 @@ async function alternarAtivo(id, novoAtivo){
   var { error } = await supabaseClient.rpc('set_user_ativo', { p_user_id: id, p_ativo: novoAtivo });
   if(error){ alert('Erro: '+error.message); return; }
   await carregarUsuarios();
+}
+
+async function redefinirSenha(id, email){
+  var senha = prompt('Nova senha para '+email+' (mínimo 6 caracteres):');
+  if(senha === null) return;
+  if(senha.length < 6){ alert('A senha precisa ter pelo menos 6 caracteres.'); return; }
+  var confirmacao = prompt('Confirme a nova senha:');
+  if(confirmacao === null) return;
+  if(confirmacao !== senha){ alert('As senhas não conferem.'); return; }
+
+  var { data, error } = await supabaseClient.functions.invoke('admin-reset-password', {
+    body: { user_id: id, new_password: senha }
+  });
+  if(error){ alert('Erro ao redefinir senha: '+error.message); return; }
+  if(!data || !data.ok){ alert('Erro: '+(data && data.error ? data.error : 'falha desconhecida')); return; }
+  alert('Senha redefinida com sucesso.');
 }
 
 async function abrirProdutosDoPo(userId, userEmail){
