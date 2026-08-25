@@ -101,20 +101,33 @@ using ( is_admin() )
 with check ( is_admin() );
 
 -- Define o perfil (role) de um usuário. Existe como função (em vez de um
--- UPDATE direto do navegador) por 2 motivos: só admin pode chamar (checado
--- aqui dentro, com erro de verdade se não puder — um UPDATE bloqueado por
--- RLS simplesmente não faz nada e não avisa erro), e porque a tela de criar
+-- UPDATE direto do navegador) por 2 motivos: a permissão é checada aqui
+-- dentro, com erro de verdade se não puder (um UPDATE bloqueado por RLS
+-- simplesmente não faz nada e não avisa erro), e porque a tela de criar
 -- usuário troca de sessão internamente (signUp loga como o usuário novo);
 -- fazer a definição do perfil como uma função evita depender de restaurar
--- a sessão do admin no timing exato certo.
+-- a sessão do admin/manager no timing exato certo.
+--
+-- Regra: Admin pode definir qualquer perfil, em qualquer usuário. Manager
+-- só pode definir 'po' ou 'stakeholder', e só em usuários que hoje já são
+-- 'po' ou 'stakeholder' (ou acabaram de ser criados, com o padrão
+-- 'stakeholder') — ou seja, Manager nunca consegue promover ninguém a
+-- admin/manager, nem mexer em quem já é admin/manager.
 create or replace function set_user_role(p_user_id uuid, p_role text, p_nome text default null)
 returns void language plpgsql security definer as $$
+declare
+  v_role_atual text;
 begin
-  if not is_admin() then
-    raise exception 'apenas administradores podem definir o perfil de um usuário';
-  end if;
+  select role into v_role_atual from profiles where id = p_user_id;
   if p_role not in ('admin','manager','po','stakeholder') then
     raise exception 'perfil inválido: %', p_role;
+  end if;
+  if is_admin() then
+    -- admin pode tudo
+  elsif is_manager() and p_role in ('po','stakeholder') and coalesce(v_role_atual,'stakeholder') in ('po','stakeholder') then
+    -- manager pode gerenciar po/stakeholder
+  else
+    raise exception 'sem permissão para definir esse perfil';
   end if;
   update profiles set role = p_role, nome = coalesce(p_nome, nome) where id = p_user_id;
 end;
@@ -124,15 +137,23 @@ grant execute on function set_user_role(uuid, text, text) to authenticated;
 -- Ativa/desativa o acesso de um usuário. Não existe "excluir conta" de
 -- verdade sem a service_role key (que nunca deve ir pro código do
 -- navegador) — desativar tem o mesmo efeito prático (a pessoa não consegue
--- mais entrar) sem esse risco.
+-- mais entrar) sem esse risco. Mesma regra de escopo do set_user_role:
+-- Manager só ativa/desativa quem já é po/stakeholder.
 create or replace function set_user_ativo(p_user_id uuid, p_ativo boolean)
 returns void language plpgsql security definer as $$
+declare
+  v_role_atual text;
 begin
-  if not is_admin() then
-    raise exception 'apenas administradores podem ativar/desativar usuários';
-  end if;
   if p_user_id = auth.uid() and p_ativo = false then
     raise exception 'você não pode desativar sua própria conta';
+  end if;
+  select role into v_role_atual from profiles where id = p_user_id;
+  if is_admin() then
+    -- admin pode tudo
+  elsif is_manager() and coalesce(v_role_atual,'stakeholder') in ('po','stakeholder') then
+    -- manager pode gerenciar po/stakeholder
+  else
+    raise exception 'sem permissão para ativar/desativar esse usuário';
   end if;
   update profiles set ativo = p_ativo where id = p_user_id;
 end;
@@ -161,18 +182,19 @@ end;
 $$;
 grant execute on function claim_first_admin(text) to authenticated;
 
--- lista usuários (id + e-mail interno + perfil) — admin ou manager podem
--- chamar (o Manager precisa disso pra escolher PO/stakeholder em "Gerenciar
--- acesso"; a TELA de criar usuário em si continua restrita a admin).
+-- lista usuários (id + e-mail interno + perfil + último login) — admin ou
+-- manager podem chamar (o Manager precisa disso pra escolher PO/stakeholder
+-- em "Gerenciar acesso" e pra tela de administração). last_sign_in_at já
+-- vem pronto do Supabase Auth, não precisamos rastrear login nós mesmos.
 drop function if exists list_users();
 create or replace function list_users()
-returns table(id uuid, email text, role text, ativo boolean) language plpgsql security definer as $$
+returns table(id uuid, email text, role text, ativo boolean, ultimo_login timestamptz) language plpgsql security definer as $$
 begin
   if not can_manage() then
     raise exception 'apenas administradores ou managers podem listar usuários';
   end if;
   return query
-    select au.id, au.email::text, coalesce(p.role, 'stakeholder'), coalesce(p.ativo, true)
+    select au.id, au.email::text, coalesce(p.role, 'stakeholder'), coalesce(p.ativo, true), au.last_sign_in_at
     from auth.users au
     left join profiles p on p.id = au.id
     order by au.email;
@@ -421,14 +443,19 @@ extra).
 
 ## Perfis existentes hoje
 
-| Perfil | Cria produtos / gerencia acesso | Edita roadmap | Acessa o Hub | Cria/edita contas de usuário |
+| Perfil | Cria produtos / gerencia acesso | Edita roadmap | Acessa o Hub | Cria contas de usuário |
 |---|---|---|---|---|
-| **Admin** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ✅ |
-| **Manager** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ❌ |
+| **Admin** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ✅ qualquer perfil |
+| **Manager** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ✅ só PO e Stakeholder |
 | **PO** | ❌ | ✅ só o(s) produto(s) dele | ✅ | ❌ |
 | **Stakeholder** | ❌ | ❌ (só visualiza) | ❌ | ❌ |
 
-Hoje, **só o Admin** cria contas de qualquer perfil, edita o perfil de um usuário já existente e ativa/desativa o acesso dele (tudo em `admin-usuarios.html`). Vincular um usuário como PO ou Stakeholder de um produto específico é feito por Admin ou Manager, em **Produtos → Gerenciar acesso**.
+- **Admin** cria/edita/ativa/desativa contas de **qualquer** perfil.
+- **Manager** cria/edita/ativa/desativa contas **só de PO e Stakeholder** — nunca consegue criar ou mexer numa conta Admin/Manager (checado no banco, não só escondido na tela).
+- Um usuário PO pode estar associado a **mais de um produto**. Isso é feito de dois jeitos, que se equivalem (mexem no mesmo dado):
+  - Em **Produtos → Gerenciar acesso** (por produto): escolhe qual usuário é o PO daquele produto.
+  - Em **Administração de usuários** (por usuário): pra um usuário já com perfil PO, um botão "Produtos" abre a lista de todos os produtos com checkbox — marca/desmarca quais ele é responsável.
+- Criar um usuário como **PO exige marcar pelo menos 1 produto** na hora da criação.
 
 Não existe "excluir conta" de verdade — isso exigiria a `service_role` key do Supabase, que nunca deve aparecer no código do navegador (ela ignora toda regra de segurança do banco). **Desativar** tem o mesmo efeito na prática: a pessoa é deslogada na hora e não consegue mais entrar até ser reativada.
 

@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="assets/css/style.css">
 <style>
 .tbl-users{width:100%;border-collapse:collapse;background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:28px}
-.tbl-users th{text-align:left;font-size:9.5px;color:var(--dim);text-transform:uppercase;padding:10px 14px;background:var(--bg)}
-.tbl-users td{padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border);vertical-align:middle}
+.tbl-users th{text-align:left;font-size:9.5px;color:var(--dim);text-transform:uppercase;padding:10px 14px;background:var(--bg);white-space:nowrap}
+.tbl-users td{padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border);vertical-align:middle;white-space:nowrap}
 .role-badge{padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
 .role-badge.admin{background:#fef3c7;color:#b45309}
 .role-badge.manager{background:#ffe4d5;color:#c2410c}
@@ -18,14 +18,26 @@
 .status-badge.ativo{background:#dcfce7;color:#059669}
 .status-badge.inativo{background:#fee2e2;color:#dc2626}
 .tbl-users select{font-size:11.5px;padding:5px 7px;border-radius:6px;border:1.5px solid var(--border);font-family:inherit;background:#fff}
-.row-actions{display:flex;gap:6px;flex-wrap:wrap}
-.row-actions button{font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer;font-family:inherit;border:1.5px solid var(--border);background:var(--bg3,#f7f9fc);color:var(--navy)}
+.row-actions button, .tbl-users td button{font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer;font-family:inherit;border:1.5px solid var(--border);background:var(--bg3,#f7f9fc);color:var(--navy)}
 .row-actions button.danger{color:#dc2626;border-color:#fecaca}
-.row-actions button:disabled{opacity:.4;cursor:default}
-.new-admin-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:380px;box-shadow:var(--sh)}
+.row-actions button:disabled, .tbl-users td button:disabled{opacity:.4;cursor:default}
+.new-admin-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:420px;box-shadow:var(--sh)}
 .new-admin-card h3{font-size:14px;color:var(--navy);margin-bottom:4px}
 .new-admin-card p{font-size:11.5px;color:var(--muted);margin-bottom:16px}
 .new-admin-card select{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:var(--bg);font-family:inherit}
+.checklist{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:14px}
+.chk-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);padding:4px 0}
+.chk-note{color:var(--dim);font-size:10px}
+.pm-overlay{position:fixed;inset:0;background:rgba(15,25,45,.55);z-index:3000;display:flex;align-items:center;justify-content:center}
+.pm-modal{background:#fff;border-radius:14px;width:420px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.pm-modal-hdr{background:var(--navy);color:#fff;padding:14px 18px}
+.pm-modal-hdr h3{font-size:14px;font-weight:800;margin:0}
+.pm-modal-body{padding:18px}
+.pm-checklist{max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.pm-check{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);padding:5px 0}
+.pm-actions{display:flex;gap:8px;margin-top:18px}
+.pm-actions button{flex:1;padding:9px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid var(--border);background:#fff;color:var(--muted)}
+.pm-actions button.primary{background:var(--navy);color:#fff;border-color:transparent}
 </style>
 </head>
 <body>
@@ -57,25 +69,27 @@
   <p id="pageSub">Carregando...</p>
 
   <div id="semAcesso" class="hide">
-    <p style="color:var(--muted);font-size:13px">Esta tela é só para administradores.</p>
+    <p style="color:var(--muted);font-size:13px">Esta tela é só para administradores e managers.</p>
   </div>
 
   <div id="conteudo" class="hide">
+    <div style="overflow-x:auto">
     <table class="tbl-users" id="tblUsers">
-      <thead><tr><th>E-mail interno</th><th>Perfil</th><th>Status</th><th>Ações</th></tr></thead>
+      <thead><tr><th>E-mail interno</th><th>Perfil</th><th>Status</th><th>Último login</th><th>Produtos</th><th>Ações</th></tr></thead>
       <tbody id="tblUsersBody"></tbody>
     </table>
+    </div>
 
     <div class="new-admin-card">
       <h3>Criar novo usuário</h3>
-      <p>Por enquanto, só o administrador cria contas — usuário e senha diretos. Depois vamos exigir que a pessoa defina a própria senha no primeiro acesso.</p>
+      <p id="newUserHint">Por enquanto, só usuário e senha diretos — depois vamos exigir que a pessoa defina a própria senha no primeiro acesso.</p>
       <form id="novoUsuarioForm">
         <div class="field"><label>Perfil</label>
-          <select id="na-role">
-            <option value="stakeholder">Stakeholder — só visualiza produtos liberados</option>
-            <option value="manager">Manager — tudo de admin, exceto criar usuários</option>
-            <option value="admin">Admin — acesso total</option>
-          </select>
+          <select id="na-role" onchange="onRoleChangeCriacao()"></select>
+        </div>
+        <div class="field hide" id="na-produtos-wrap">
+          <label>Produtos associados (marque pelo menos 1)</label>
+          <div class="checklist" id="na-produtos-list"></div>
         </div>
         <div class="field"><label>Usuário</label><input type="text" id="na-usuario" placeholder="novo.usuario" required></div>
         <div class="field"><label>Senha</label><input type="password" id="na-senha" placeholder="••••••••" required></div>
@@ -92,11 +106,88 @@
 <script src="assets/js/auth.js"></script>
 <script>
 var MEU_ID = null;
-var ROLE_OPTS = ['admin', 'manager', 'po', 'stakeholder'];
+var MEU_ROLE = '';
+var PRODUTOS_CACHE = null;
+
+var ROLE_LABELS = {
+  admin: 'Admin — acesso total',
+  manager: 'Manager — tudo de admin, exceto criar usuários',
+  po: 'PO — edita só os produtos associados',
+  stakeholder: 'Stakeholder — só visualiza produtos liberados'
+};
+
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// Monta um literal de string JS entre aspas simples, escapando o que precisar.
+function jsStr(s){
+  return "'" + String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+}
+// Monta um valor de onclick="..." seguro: usa aspas simples pros argumentos
+// JS (via jsStr) e escapa o resultado inteiro pra entrar num atributo HTML
+// com aspas duplas sem quebrar (JSON.stringify() sozinho quebraria, porque
+// ele também usa aspas duplas).
+function onclickAttr(chamada){
+  return escapeHtml(chamada);
+}
+function formatarData(iso){
+  if(!iso) return 'nunca';
+  var d = new Date(iso);
+  return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+// Quais perfis EU posso escolher ao criar um usuário novo.
+function opcoesRoleParaCriacao(){
+  return MEU_ROLE === 'admin' ? ['admin','manager','po','stakeholder'] : ['po','stakeholder'];
+}
+// Quais perfis EU posso escolher ao editar o perfil de um usuário que hoje é "roleAtual".
+// Retorna null se eu não posso editar esse usuário de jeito nenhum.
+function opcoesRoleParaEditar(roleAtual){
+  if(MEU_ROLE === 'admin') return ['admin','manager','po','stakeholder'];
+  if(MEU_ROLE === 'manager' && (roleAtual === 'po' || roleAtual === 'stakeholder')) return ['po','stakeholder'];
+  return null;
+}
+function podeEditarUsuario(roleAtual, souEu){
+  return !souEu && opcoesRoleParaEditar(roleAtual) !== null;
+}
+
+async function getProdutos(forceRefresh){
+  if(PRODUTOS_CACHE && !forceRefresh) return PRODUTOS_CACHE;
+  var { data } = await supabaseClient.from('products').select('id,name,po_user_id').order('name');
+  PRODUTOS_CACHE = data || [];
+  return PRODUTOS_CACHE;
+}
+
+function popularSelectCriacao(){
+  var sel = document.getElementById('na-role');
+  sel.innerHTML = opcoesRoleParaCriacao().map(function(r){ return '<option value="'+r+'">'+ROLE_LABELS[r]+'</option>'; }).join('');
+  document.getElementById('newUserHint').textContent = MEU_ROLE === 'admin'
+    ? 'Você pode criar qualquer perfil. Usuário e senha diretos por enquanto.'
+    : 'Como manager, você só cria contas PO ou Stakeholder. Usuário e senha diretos por enquanto.';
+  onRoleChangeCriacao();
+}
+
+async function onRoleChangeCriacao(){
+  var role = document.getElementById('na-role').value;
+  var wrap = document.getElementById('na-produtos-wrap');
+  if(role === 'po'){
+    wrap.classList.remove('hide');
+    var produtos = await getProdutos();
+    document.getElementById('na-produtos-list').innerHTML = produtos.length
+      ? produtos.map(function(p){
+          return '<label class="chk-item"><input type="checkbox" value="'+p.id+'"> '+escapeHtml(p.name)+
+            (p.po_user_id ? ' <span class="chk-note">(já tem PO — vai ser substituído)</span>' : '')+'</label>';
+        }).join('')
+      : '<span style="color:var(--dim);font-size:11.5px">Nenhum produto cadastrado ainda — crie um em Produtos primeiro.</span>';
+  } else {
+    wrap.classList.add('hide');
+  }
+}
 
 function selectRoleHtml(id, roleAtual){
+  var opcoes = opcoesRoleParaEditar(roleAtual) || [roleAtual];
   return '<select onchange="salvarRole(\''+id+'\', this.value, this)">'+
-    ROLE_OPTS.map(function(r){ return '<option value="'+r+'" '+(r===roleAtual?'selected':'')+'>'+r+'</option>'; }).join('')+
+    opcoes.map(function(r){ return '<option value="'+r+'" '+(r===roleAtual?'selected':'')+'>'+r+'</option>'; }).join('')+
   '</select>';
 }
 
@@ -104,20 +195,32 @@ async function carregarUsuarios(){
   var { data, error } = await supabaseClient.rpc('list_users');
   var tbody = document.getElementById('tblUsersBody');
   if(error){
-    tbody.innerHTML = '<tr><td colspan="4">Erro ao carregar: '+error.message+'</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">Erro ao carregar: '+error.message+'</td></tr>';
     return;
   }
   tbody.innerHTML = (data||[]).map(function(u){
     var role = u.role || 'stakeholder';
     var ativo = u.ativo !== false;
     var souEu = u.id === MEU_ID;
+    var editavel = podeEditarUsuario(role, souEu);
+
+    var roleCell = editavel ? selectRoleHtml(u.id, role) : '<span class="role-badge '+role+'">'+role+'</span>';
+    var produtosCell = role === 'po'
+      ? '<button onclick="'+onclickAttr('abrirProdutosDoPo('+jsStr(u.id)+','+jsStr(u.email)+')')+'">Produtos</button>'
+      : '<span style="color:var(--dim)">—</span>';
+    var acaoBtn = souEu
+      ? '<button disabled title="Você não pode desativar a própria conta">Desativar</button>'
+      : (editavel
+          ? '<button onclick="alternarAtivo(\''+u.id+'\','+(!ativo)+')" class="'+(ativo?'danger':'')+'">'+(ativo?'Desativar':'Reativar')+'</button>'
+          : '<button disabled title="Sem permissão para gerenciar este usuário">Desativar</button>');
+
     return '<tr id="row-'+u.id+'">'+
       '<td>'+u.email+(souEu?' <span style="color:var(--dim);font-size:10px">(você)</span>':'')+'</td>'+
-      '<td>'+selectRoleHtml(u.id, role)+'</td>'+
+      '<td>'+roleCell+'</td>'+
       '<td><span class="status-badge '+(ativo?'ativo':'inativo')+'">'+(ativo?'ativo':'inativo')+'</span></td>'+
-      '<td class="row-actions">'+
-        '<button '+(souEu?'disabled title="Você não pode desativar a própria conta"':'onclick="alternarAtivo(\''+u.id+'\','+(!ativo)+')"')+' class="'+(ativo?'danger':'')+'">'+(ativo?'Desativar':'Reativar')+'</button>'+
-      '</td>'+
+      '<td style="color:var(--muted)">'+formatarData(u.ultimo_login)+'</td>'+
+      '<td>'+produtosCell+'</td>'+
+      '<td class="row-actions">'+acaoBtn+'</td>'+
     '</tr>';
   }).join('');
 }
@@ -126,7 +229,8 @@ async function salvarRole(id, novoRole, selectEl){
   selectEl.disabled = true;
   var { error } = await supabaseClient.rpc('set_user_role', { p_user_id: id, p_role: novoRole });
   selectEl.disabled = false;
-  if(error){ alert('Erro ao mudar perfil: '+error.message); await carregarUsuarios(); return; }
+  if(error){ alert('Erro ao mudar perfil: '+error.message); }
+  PRODUTOS_CACHE = null;
   await carregarUsuarios();
 }
 
@@ -135,6 +239,54 @@ async function alternarAtivo(id, novoAtivo){
   var { error } = await supabaseClient.rpc('set_user_ativo', { p_user_id: id, p_ativo: novoAtivo });
   if(error){ alert('Erro: '+error.message); return; }
   await carregarUsuarios();
+}
+
+async function abrirProdutosDoPo(userId, userEmail){
+  var produtos = await getProdutos(true);
+  var overlay = document.createElement('div');
+  overlay.className = 'pm-overlay';
+  overlay.innerHTML =
+    '<div class="pm-modal">'+
+      '<div class="pm-modal-hdr"><h3>Produtos de '+escapeHtml(userEmail)+'</h3></div>'+
+      '<div class="pm-modal-body">'+
+        '<div class="pm-checklist">'+
+          (produtos.length ? produtos.map(function(p){
+            var marcado = p.po_user_id === userId;
+            var outroPO = p.po_user_id && p.po_user_id !== userId;
+            return '<label class="pm-check"><input type="checkbox" value="'+p.id+'" '+(marcado?'checked':'')+'> '+escapeHtml(p.name)+
+              (outroPO ? ' <span class="chk-note">(tem outro PO — vai ser substituído)</span>' : '')+'</label>';
+          }).join('') : '<span style="color:var(--dim);font-size:11.5px">Nenhum produto cadastrado ainda.</span>')+
+        '</div>'+
+        '<div class="pm-actions">'+
+          '<button id="pm-cancel">Cancelar</button>'+
+          '<button class="primary" id="pm-save">Salvar</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  overlay.querySelector('#pm-cancel').onclick = function(){ overlay.remove(); };
+  overlay.querySelector('#pm-save').onclick = async function(){
+    var marcados = Array.prototype.slice.call(overlay.querySelectorAll('.pm-check input:checked')).map(function(i){ return i.value; });
+    if(marcados.length === 0 && !confirm('Nenhum produto marcado — esse PO vai ficar sem nenhum produto associado. Continuar?')) return;
+    var erros = [];
+    for(var i=0;i<produtos.length;i++){
+      var p = produtos[i];
+      var deveSerPO = marcados.indexOf(p.id) > -1;
+      var eraPO = p.po_user_id === userId;
+      if(deveSerPO && !eraPO){
+        var r1 = await supabaseClient.from('products').update({po_user_id:userId}).eq('id', p.id);
+        if(r1.error) erros.push(p.name+': '+r1.error.message);
+      } else if(!deveSerPO && eraPO){
+        var r2 = await supabaseClient.from('products').update({po_user_id:null}).eq('id', p.id);
+        if(r2.error) erros.push(p.name+': '+r2.error.message);
+      }
+    }
+    if(erros.length) alert('Alguns produtos não puderam ser atualizados:\n'+erros.join('\n'));
+    PRODUTOS_CACHE = null;
+    overlay.remove();
+    await carregarUsuarios();
+  };
 }
 
 document.getElementById('novoUsuarioForm').addEventListener('submit', async function(e){
@@ -151,11 +303,21 @@ document.getElementById('novoUsuarioForm').addEventListener('submit', async func
   if(senha.length < 6){ erro.textContent='A senha precisa ter pelo menos 6 caracteres.'; erro.classList.remove('hide'); return; }
   if(senha !== senha2){ erro.textContent='As senhas não conferem.'; erro.classList.remove('hide'); return; }
 
+  var produtosSelecionados = [];
+  if(role === 'po'){
+    produtosSelecionados = Array.prototype.slice.call(document.querySelectorAll('#na-produtos-list input:checked')).map(function(i){ return i.value; });
+    if(produtosSelecionados.length === 0){
+      erro.textContent = 'Selecione pelo menos 1 produto pra esse PO.';
+      erro.classList.remove('hide');
+      return;
+    }
+  }
+
   btn.disabled = true; btn.textContent = 'Criando...';
   try {
     // signUp() troca a sessão ativa do navegador pro usuário recém-criado —
-    // por isso guardamos a sessão do admin atual antes, e restauramos depois,
-    // pra quem está criando o novo usuário continuar logado como ele mesmo.
+    // por isso guardamos a sessão atual antes, e restauramos depois, pra
+    // quem está criando o novo usuário continuar logado como ele mesmo.
     var { data: { session: sessaoAtual } } = await supabaseClient.auth.getSession();
 
     var { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({
@@ -181,7 +343,16 @@ document.getElementById('novoUsuarioForm').addEventListener('submit', async func
     });
     if(roleError) throw roleError;
 
+    if(role === 'po'){
+      for(var i=0;i<produtosSelecionados.length;i++){
+        var r = await supabaseClient.from('products').update({po_user_id: signUpData.user.id}).eq('id', produtosSelecionados[i]);
+        if(r.error) throw r.error;
+      }
+    }
+
     document.getElementById('novoUsuarioForm').reset();
+    PRODUTOS_CACHE = null;
+    popularSelectCriacao();
     await carregarUsuarios();
   } catch(err){
     erro.textContent = 'Erro: '+err.message;
@@ -194,13 +365,15 @@ document.getElementById('novoUsuarioForm').addEventListener('submit', async func
   var ctx = await initTopbar('index.html');
   if(!ctx) return;
   MEU_ID = ctx.user.id;
-  var isAdmin = ctx.perfil && ctx.perfil.role === 'admin';
+  MEU_ROLE = (ctx.perfil && ctx.perfil.role) || '';
+  var podeAcessar = MEU_ROLE === 'admin' || MEU_ROLE === 'manager';
   document.getElementById('pageSub').textContent = 'Usuários cadastrados no portal, edição de perfil/acesso e criação de novas contas.';
-  if(!isAdmin){
+  if(!podeAcessar){
     document.getElementById('semAcesso').classList.remove('hide');
     return;
   }
   document.getElementById('conteudo').classList.remove('hide');
+  popularSelectCriacao();
   await carregarUsuarios();
 })();
 </script>

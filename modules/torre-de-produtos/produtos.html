@@ -80,6 +80,10 @@ var USERS_CACHE = null;
 function escapeHtml(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// Monta um literal de string JS entre aspas simples, escapando o que precisar.
+function jsStr(s){
+  return "'" + String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+}
 
 async function getUsersMap(){
   if(USERS_CACHE) return USERS_CACHE;
@@ -121,7 +125,7 @@ async function carregarProdutos(){
       ? '<span class="tag admin">'+(USER_ROLE==='manager'?'Manager':'Admin')+' — vê tudo</span>'
       : (isPo ? '<span class="tag po">Você é o PO</span>' : '<span class="tag view">Você acompanha (visualização)</span>');
     var manageBtn = IS_ADMIN ? '<button onclick="abrirGerenciarAcesso(\''+p.id+'\')">Gerenciar acesso</button>' : '';
-    var delBtn = IS_ADMIN ? '<button class="danger" onclick="excluirProduto(\''+p.id+'\','+JSON.stringify(p.name)+')">Excluir</button>' : '';
+    var delBtn = IS_ADMIN ? '<button class="danger" onclick="'+escapeHtml('excluirProduto('+jsStr(p.id)+','+jsStr(p.name)+')')+'">Excluir</button>' : '';
     return '<div class="prod-card">'+
       tag+
       '<h4>'+escapeHtml(p.name)+'</h4>'+

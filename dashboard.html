@@ -56,7 +56,7 @@
 (async function(){
   var ctx = await initTopbar('index.html');
   if(!ctx) return;
-  if(ctx.perfil && ctx.perfil.role === 'admin'){
+  if(ctx.perfil && (ctx.perfil.role === 'admin' || ctx.perfil.role === 'manager')){
     document.getElementById('cardAdmin').classList.remove('hide');
   }
 })();
