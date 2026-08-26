@@ -224,7 +224,7 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
       <b id="clockTime">--:--:--</b>
       <span id="clockDate">-- --- ----</span>
     </div>
-    <div class="hub-user">
+    <div class="hub-user" id="hubUserBox">
       <div class="hub-avatar" id="topbarAvatar">--</div>
       <span id="topbarName">Carregando...</span>
       <span class="hub-logout" onclick="handleLogout()">Sair</span>
@@ -936,21 +936,45 @@ function exportHub(){
 
 render();
 
-// Integração com o portal: protege a página, preenche usuário/logout e —
-// se não for stakeholder (que não acessa o Hub) — já busca os dados reais
-// de Produtos assim que a sessão é confirmada.
-(async function initHub(){
-  var ctx = await initTopbar('../../index.html');
-  if(!ctx) return; // sem sessão — já foi redirecionado pro login
+// Se este arquivo foi aberto como um .html EXPORTADO (fora do portal —
+// alguém recebeu o arquivo e deu duplo clique nele), os dados já vêm
+// embutidos num <script> que fica MAIS ABAIXO no HTML (é adicionado no
+// fim do arquivo na hora de exportar — ver exportHub()). Por isso essa
+// checagem precisa rodar depois que a página termina de carregar todos
+// os scripts (setTimeout 0 garante isso), e não direto aqui em cima —
+// senão window.__HUB_SNAPSHOT__ ainda nem existiria.
+setTimeout(function(){
+  var snapshot = window.__HUB_SNAPSHOT__;
+  if(snapshot && snapshot.products){
+    // Mostra os dados embutidos direto, sem exigir login nem buscar nada
+    // no Supabase — é assim que dá pra ver o arquivo localmente, do
+    // jeito que os exemplos originais funcionavam.
+    PRODUCTS = snapshot.products;
+    PRODUCT_ORDER = snapshot.order || Object.keys(PRODUCTS);
+    render();
+    var quando = snapshot.savedAt ? new Date(snapshot.savedAt).toLocaleString('pt-BR') : '';
+    document.getElementById('subtxt').textContent = 'Versão exportada'+(quando?' em '+quando:'')+' — arquivo fora do portal, os dados não são atualizados automaticamente.';
+    var refreshBtn = document.getElementById('refreshBtn');
+    if(refreshBtn) refreshBtn.style.display = 'none';
+    var hubUserBox = document.getElementById('hubUserBox');
+    if(hubUserBox) hubUserBox.style.display = 'none';
+  } else {
+    // Fluxo normal, dentro do portal: exige login e busca os dados reais
+    // de Produtos assim que a sessão é confirmada.
+    (async function initHub(){
+      var ctx = await initTopbar('../../index.html');
+      if(!ctx) return; // sem sessão — já foi redirecionado pro login
 
-  if(ctx.perfil && ctx.perfil.role === 'stakeholder'){
-    document.body.innerHTML = '<div style="padding:60px;text-align:center;color:#64748b;font-family:Segoe UI,sans-serif">'+
-      'Você não tem acesso ao Hub de Produtos. <a href="home.html">Voltar</a></div>';
-    return;
+      if(ctx.perfil && ctx.perfil.role === 'stakeholder'){
+        document.body.innerHTML = '<div style="padding:60px;text-align:center;color:#64748b;font-family:Segoe UI,sans-serif">'+
+          'Você não tem acesso ao Hub de Produtos. <a href="home.html">Voltar</a></div>';
+        return;
+      }
+
+      await atualizarDados(false);
+    })();
   }
-
-  await atualizarDados(false);
-})();
+}, 0);
 </script>
 </body>
 </html>
