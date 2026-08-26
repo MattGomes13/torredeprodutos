@@ -1219,7 +1219,7 @@ reconcileTypes();
 var {error}=await supabaseClient.rpc('replace_epics',{p_product_id:CURRENT_PRODUCT.id,p_items:DATA});
 if(error){showToast("Erro ao salvar import no Supabase: "+error.message,"err");return;}
 saveTypes();saveLayerOrder();saveLayerMeta();
-buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();
+buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();
 setSaveInd(true,DATA.length+" epicos importados");
 showToast("Importado com sucesso! "+DATA.length+" epicos carregados","ok");
 }catch(err){showToast("Erro ao importar: "+err.message,"err");}
@@ -2722,7 +2722,7 @@ item.late=item.fim&&item.status!=="Finalizado"?new Date(item.fim)<new Date():fal
 showToast("Epico atualizado!","ok");
 }
 closeEdit();
-buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();
+buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();
 saveEdits();
 }
 // ── DELETE ────────────────────────────────────────────────────────────────
@@ -2739,7 +2739,7 @@ var idx=parseInt(document.getElementById("del-overlay").dataset.idx);
 var title=DATA[idx].titulo;
 DATA.splice(idx,1);
 closeConfirmDel();
-buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();
+buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();
 saveEdits();
 showToast("Epico removido: "+title,"warn");
 }
@@ -2830,7 +2830,7 @@ LAYER_ORDER=getLayerOrder().filter(function(t){return t!==tipo;});
 TIPO_OPTS=Object.keys(TYPES);
 saveTypes();saveLayerOrder();saveLayerMeta();saveEditsQuiet();
 renderLayerList();
-buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();
+buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();
 showToast('Layer "'+tipo+'" excluída'+(count>0?" — "+count+" épico(s) movido(s) para \""+fallback+"\"":""),"warn");
 }
 document.getElementById("layer-overlay").addEventListener("click",function(e){if(e.target===this)closeLayerModal();});
@@ -2945,7 +2945,7 @@ else LAYER_ORDER.push(newName);
 saveLayerOrder();saveEditsQuiet();saveLayerMeta();saveTypes();
 closeLayerEdit();
 renderLayerList();
-buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();
+buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();
 showToast((isNew?"Layer '"+newName+"' criada!":"Layer '"+newName+"' atualizada!"),"ok");
 }
 // ── ADD NEW LAYER ─────────────────────────────────────────────────────────
@@ -4128,7 +4128,29 @@ var {data:epicRows}=await supabaseClient.from('epics').select('item').eq('produc
 DATA=(epicRows||[]).map(function(r){return r.item;});
 
 loadTypes();loadLayerOrder();loadLayerMeta();
+
+// Produto sem nenhuma layer/tipo cadastrada ainda: sem isso, o campo
+// "Tipo" do formulário de novo épico ficava vazio (não tinha opção pra
+// escolher), e o épico criado sem tipo nunca aparecia no Gantt/tabela.
+// Garante pelo menos 1 tipo padrão, e conserta épicos que já ficaram
+// sem tipo salvo por causa desse bug (reatribui pro primeiro tipo
+// disponível, pra eles voltarem a aparecer em todas as views).
+var precisaSalvarConserto = false;
+if(Object.keys(TYPES).length===0){
+TYPES={'Geral':{c:'#2563eb',n:1,icon:'🏷',desc:''}};
+LAYER_ORDER=['Geral'];
+precisaSalvarConserto = true;
+}
+var tipoFallback = Object.keys(TYPES)[0];
+DATA.forEach(function(it){
+if(!it.tipo && tipoFallback){ it.tipo = tipoFallback; precisaSalvarConserto = true; }
+});
+
 reconcileTypes();
+
+if(precisaSalvarConserto && podeEditar()){
+saveTypes(); saveLayerOrder(); saveEditsQuiet();
+}
 buildKPIs();
 buildTable();
 buildLegend();
