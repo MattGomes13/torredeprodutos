@@ -129,6 +129,7 @@ async function carregarProdutos(){
     return '<div class="prod-card">'+
       tag+
       '<h4>'+escapeHtml(p.name)+'</h4>'+
+      (p.bu ? '<div style="font-size:10.5px;color:var(--dim);margin:-4px 0 8px">BU: '+escapeHtml(p.bu)+'</div>' : '')+
       '<div class="actions">'+
         '<a class="primary" href="roadmap.html?product='+p.id+'">Abrir roadmap →</a>'+
         manageBtn+delBtn+
@@ -171,6 +172,8 @@ async function abrirGerenciarAcesso(productId){
     '<div class="pm-modal">'+
       '<div class="pm-modal-hdr"><h3>Gerenciar acesso — '+escapeHtml(produto.name)+'</h3></div>'+
       '<div class="pm-modal-body">'+
+        '<label class="pm-label">BU (área de negócio)</label>'+
+        '<input type="text" id="pm-bu" value="'+escapeHtml(produto.bu||'')+'" placeholder="ex: Cartões, Crédito, Meios de Pagamento..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12.5px;font-family:inherit;margin-bottom:14px">'+
         '<label class="pm-label">PO responsável por este produto</label>'+
         '<select id="pm-po">'+
           '<option value="">— nenhum definido —</option>'+
@@ -193,8 +196,9 @@ async function abrirGerenciarAcesso(productId){
   overlay.querySelector('#pm-cancel').onclick = function(){ overlay.remove(); };
   overlay.querySelector('#pm-save').onclick = async function(){
     var poId = overlay.querySelector('#pm-po').value || null;
+    var bu = overlay.querySelector('#pm-bu').value.trim() || null;
     var selecionados = Array.prototype.slice.call(overlay.querySelectorAll('.pm-check input:checked')).map(function(i){ return i.value; });
-    var { error: err1 } = await supabaseClient.from('products').update({po_user_id: poId}).eq('id', productId);
+    var { error: err1 } = await supabaseClient.from('products').update({po_user_id: poId, bu: bu}).eq('id', productId);
     var { error: err2 } = await supabaseClient.from('product_stakeholders').delete().eq('product_id', productId);
     var err3 = null;
     if(selecionados.length){

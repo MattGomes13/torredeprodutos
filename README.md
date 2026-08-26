@@ -253,6 +253,7 @@ create table products (
   name text not null,
   po_user_id uuid references auth.users,       -- o PO responsável por este produto
   config jsonb not null default '{}'::jsonb,    -- tipos/layers/tema/logo do roadmap
+  bu text,                                      -- área de negócio, pro comparativo por BU no Hub
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -384,7 +385,9 @@ python -m http.server 8000
 ## Como funciona o módulo "Torre de Produtos"
 
 - **`home.html`** → escolher entre "Hub de Produtos" e "Produtos" (Stakeholder não vê o card do Hub).
-- **`hub.html`** → busca os produtos e épicos **direto do Supabase** (as mesmas tabelas `products`/`epics` que `roadmap.html` usa) e monta uma visão consolidada (financeiro, status geral, tabela combinada). Não existe mais upload/importação manual — qualquer produto criado, ou roadmap atualizado, em Produtos aparece aqui automaticamente na próxima vez que a tela carrega (ou clicando em "🔄 Atualizar"). Quem acessa vê só os produtos que o RLS já libera pra ele (admin/manager: todos; PO: só o(s) dele). **Stakeholder não tem acesso** (nem tela). A tabela `hubs` (usada numa versão anterior, baseada em upload) ficou sem uso — pode ser removida do banco se quiser, não afeta nada.
+- **`hub.html`** → busca os produtos e épicos **direto do Supabase** (as mesmas tabelas `products`/`epics` que `roadmap.html` usa) e monta uma visão consolidada (financeiro, comparativo por BU, tempo médio de desenvolvimento, status geral, tabela combinada). Não existe mais upload/importação manual — qualquer produto criado, ou roadmap atualizado, em Produtos aparece aqui automaticamente na próxima vez que a tela carrega (ou clicando em "🔄 Atualizar"). Quem acessa vê só os produtos que o RLS já libera pra ele (admin/manager: todos; PO: só o(s) dele). **Stakeholder não tem acesso** (nem tela). A tabela `hubs` (usada numa versão anterior, baseada em upload) ficou sem uso — pode ser removida do banco se quiser, não afeta nada.
+  - Botão **"🎤 Apresentação"**: exporta o painel (Visão Estratégica) em **PowerPoint** (slides com KPIs, comparativo por BU e valor por produto) ou **PDF** (abre a impressão do navegador — escolher "Salvar como PDF" no destino).
+  - **BU (área de negócio)**: campo opcional por produto, definido em Produtos → Gerenciar acesso. Produto sem BU entra no grupo "Sem BU definida" no comparativo.
 - **`produtos.html`** → mostra os produtos que o usuário logado pode acessar:
   - **Admin e Manager**: veem todos os produtos, podem criar novos e definir quem é o PO e quais stakeholders têm acesso de cada um (botão "Gerenciar acesso"). A única diferença entre os dois é que **só Admin cria/edita contas de usuário**.
   - **PO**: vê só o(s) produto(s) em que é o responsável, com acesso total de edição.

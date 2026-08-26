@@ -2500,7 +2500,7 @@ function renderAcompTab(){
 }
 
 // ── ENVOLVIDOS HELPERS ────────────────────────────────────────────────────
-function _envCard(icon, label, field, val){
+function _envCard(icon, label, field, val, nomes){
   return '<div class="envol-card">'+
     '<div class="envol-card-header">'+
     '<span class="envol-card-icon">'+icon+'</span>'+
@@ -2512,6 +2512,7 @@ function _envCard(icon, label, field, val){
     '<input class="envol-step-val" id="env-'+field+'" type="number" min="0" max="99" value="'+(val||0)+'" oninput="saveEnvolvidos()">'+
     '<button class="envol-step-btn" onclick="stepEnv(\''+field+'\', 1)">+</button>'+
     '</div>'+
+    '<input class="envol-names-input" id="env-nomes-'+field+'" type="text" placeholder="Nomes (separados por vírgula)" value="'+escHtml(nomes||'')+'" oninput="saveEnvolvidos()" style="width:100%;margin-top:8px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:10.5px;font-family:inherit;color:var(--text)">'+
     '</div>';
 }
 function stepEnv(field, delta){
@@ -2540,10 +2541,15 @@ function saveEnvolvidos(){
   var item=DATA[EDIT_IDX];
   if(!item.envolvidos)item.envolvidos={};
   function gv(id){var el=document.getElementById(id);return el?parseInt(el.value)||0:0;}
+  function gt(id){var el=document.getElementById(id);return el?el.value:'';}
   item.envolvidos.frontend=gv('env-frontend');
   item.envolvidos.backend=gv('env-backend');
   item.envolvidos.qa=gv('env-qa');
   item.envolvidos.outraQtd=gv('env-outraQtd');
+  item.envolvidos.frontendNomes=gt('env-nomes-frontend');
+  item.envolvidos.backendNomes=gt('env-nomes-backend');
+  item.envolvidos.qaNomes=gt('env-nomes-qa');
+  item.envolvidos.outraNomes=gt('env-nomes-outraQtd');
   var oaEl=document.getElementById('env-outra-area');
   item.envolvidos.outraArea=oaEl?oaEl.value:'';
   var spEl=document.getElementById('env-sprints');
@@ -2573,10 +2579,10 @@ function _refreshAcompTab(){
     '<div class="envol-section">'+
     '<div class="envol-section-title">👥 Envolvidos</div>'+
     '<div class="envol-grid">'+
-    _envCard('🖥️','Front-end','frontend',env.frontend||0)+
-    _envCard('⚙️','Back-end','backend',env.backend||0)+
-    _envCard('🔍','QA / Testes','qa',env.qa||0)+
-    _envCard('🏢','Outra Área','outraQtd',env.outraQtd||0)+
+    _envCard('🖥️','Front-end','frontend',env.frontend||0,env.frontendNomes)+
+    _envCard('⚙️','Back-end','backend',env.backend||0,env.backendNomes)+
+    _envCard('🔍','QA / Testes','qa',env.qa||0,env.qaNomes)+
+    _envCard('🏢','Outra Área','outraQtd',env.outraQtd||0,env.outraNomes)+
     '</div>'+
     '<div class="envol-extra-row">'+
     '<div class="envol-extra-label">📝 Outra área — especificar</div>'+
@@ -2611,7 +2617,11 @@ function _refreshAcompTab(){
     (discarded?'<span>🚫 <strong>'+discarded+'</strong> descartada'+((discarded!==1)?"s":"")+'</span>':"")+
     '</div></div></div>'+
     (item.status==="Finalizado"?'<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:9px;padding:9px 13px;margin-bottom:12px;font-size:10.5px;color:#166534;font-weight:700">✅ Este épico está Finalizado — progresso fixado em 100%</div>':'');
-  html+='<div class="acomp-add-row"><input class="acomp-add-input" id="acomp-new-text" placeholder="Descreva a atividade..." onkeydown="acompKeyDown(event)"><button class="acomp-add-btn" onclick="addAtivItem()">+ Adicionar</button></div>';
+  html+='<div class="acomp-add-row" style="flex-wrap:wrap;gap:6px">'+
+    '<input class="acomp-add-input" id="acomp-new-text" placeholder="Descreva a atividade..." onkeydown="acompKeyDown(event)" style="flex:1 1 200px">'+
+    '<input type="date" id="acomp-new-inicio" title="Data inicial (opcional)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:11px;font-family:inherit">'+
+    '<input type="date" id="acomp-new-fim" title="Data final (opcional)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:11px;font-family:inherit">'+
+    '<button class="acomp-add-btn" onclick="addAtivItem()">+ Adicionar</button></div>';
   if(ats.length===0){
     html+='<div class="acomp-empty">Nenhuma atividade cadastrada.<br>Adicione atividades para acompanhar o progresso.</div>';
   } else {
@@ -2619,8 +2629,11 @@ function _refreshAcompTab(){
       var isDone=a.status==="concluida";
       var isDisc=a.status==="descartada";
       var cls="acomp-item"+(isDone?" done":isDisc?" discarded":"");
+      var farol=_ativFarolInfo(a);
+      var farolDot=farol?'<span title="'+farol.label+'" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+farol.cor+';margin-right:6px;flex-shrink:0"></span>':'';
+      var datasTxt=(a.dataInicio||a.dataFim)?('<div class="acomp-item-dates" style="font-size:9.5px;color:var(--dim);margin-top:2px">'+farolDot+(a.dataInicio?fmtDate(a.dataInicio):'?')+' → '+(a.dataFim?fmtDate(a.dataFim):'?')+'</div>'):'';
       return'<div class="'+cls+'">'+
-      '<div class="acomp-item-text">'+escHtml(a.titulo)+'</div>'+
+      '<div class="acomp-item-text">'+escHtml(a.titulo)+datasTxt+'</div>'+
       '<div class="acomp-item-status">'+
       '<button class="acomp-check-btn'+( isDone?" done-active":"")+'" onclick="toggleAtivStatus('+i+','+"'concluida'"+ ')" title="Marcar como concluída">✓</button>'+
       '<button class="acomp-check-btn'+( isDisc?" disc-active":"")+'" onclick="toggleAtivStatus('+i+','+"'descartada'"+')" title="Descartar atividade">🚫</button>'+
@@ -2631,13 +2644,31 @@ function _refreshAcompTab(){
   var el=document.getElementById("acomp-tab-content");
   if(el)el.innerHTML=html;
 }
+// Farol da atividade: só existe se pelo menos a data final foi preenchida
+// (sem data, não dá pra dizer se está atrasada ou não). Verde = concluída
+// ou ainda no prazo; vermelho = passou da data final e não foi concluída.
+function _ativFarolInfo(a){
+  if(!a.dataFim) return null;
+  if(a.status==="concluida") return {cor:"#059669", label:"Concluída"};
+  var hoje=new Date(); hoje.setHours(0,0,0,0);
+  var fim=new Date(a.dataFim+"T00:00:00");
+  if(fim<hoje) return {cor:"#dc2626", label:"Atrasada"};
+  return {cor:"#059669", label:"No prazo"};
+}
 function addAtivItem(){
   var inp=document.getElementById("acomp-new-text");
   if(!inp)return;
   var txt=inp.value.trim();
   if(!txt){inp.focus();return;}
-  _editAtivList.push({titulo:txt,status:"pendente"});
+  var iniEl=document.getElementById("acomp-new-inicio");
+  var fimEl=document.getElementById("acomp-new-fim");
+  var nova={titulo:txt,status:"pendente"};
+  if(iniEl&&iniEl.value)nova.dataInicio=iniEl.value;
+  if(fimEl&&fimEl.value)nova.dataFim=fimEl.value;
+  _editAtivList.push(nova);
   inp.value="";
+  if(iniEl)iniEl.value="";
+  if(fimEl)fimEl.value="";
   _saveAtivToItem();
   _refreshAcompTab();
   // After adding, update progress everywhere
