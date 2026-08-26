@@ -364,14 +364,9 @@ with check ( can_manage() or is_product_po(product_id) );
    > `claim_first_admin` se recusa a rodar de novo — a tela para de
    > funcionar sozinha.
 
-7. Depois disso, como admin, use:
-   - **Administração** (card que aparece no dashboard só pra quem já é admin) → criar outros administradores (usuário + senha direto, mesma lógica do bootstrap).
+7. Depois disso, como admin (ou manager, pra PO/Stakeholder), use:
+   - **Administração** (card no dashboard, visível pra admin e manager) → criar novos usuários de qualquer perfil que você tenha permissão de criar (usuário + senha direto).
    - **Produtos** → criar produtos e decidir quem é o PO de cada um / quem pode visualizar como stakeholder.
-
-   Usuários do tipo PO/Stakeholder, por enquanto, só podem ser criados
-   rodando SQL direto no Supabase (criar o usuário em Authentication >
-   Users, e ajustar `profiles.role` se quiser) — uma tela pra isso fica
-   pra etapa de perfis e permissões.
 
 ## Rodando localmente
 
@@ -396,7 +391,7 @@ python -m http.server 8000
   - **Stakeholder**: vê só os produtos liberados pra ele, em modo **somente leitura**.
 - **`roadmap.html?product=<id>`** → o roadmap completo de 1 produto (o mesmo roadmap "Torre de Produtos" que você já usava localmente: Gantt, visão estratégica/financeira, lista, filtros, exportar Excel/PPT, gestão de layers, white-label, etc.), agora lendo/gravando os épicos na tabela `epics` do Supabase em vez de `localStorage`. Admin, Manager e PO podem editar; Stakeholder só visualiza (os botões de criar/editar/excluir/importar ficam ocultos, e o Supabase também bloqueia essas ações no banco por segurança, mesmo que alguém tente burlar a tela).
   - Botão **"⬆ Importar"**: sobe um `.html` de roadmap já exportado (como os que você já tinha rodando localmente) e carrega todos os épicos, tipos e layers dele para dentro do produto atual no Supabase — é assim que cada PO migra os dados que já tinha, sem precisar redigitar nada.
-- **`admin-usuarios.html`** → **só Admin** enxerga esta tela. Lista todos os usuários do portal e cria novos, escolhendo o perfil (Admin / Manager / Stakeholder), usuário e senha diretamente.
+- **`admin-usuarios.html`** → Admin e Manager enxergam esta tela (Manager com opções mais restritas). Lista todos os usuários do portal, mostra o último login, permite editar perfil/ativar-desativar/redefinir senha de cada um, e cria novos usuários (Admin escolhe entre Admin/Manager/PO/Stakeholder; Manager só entre PO/Stakeholder), usuário e senha diretamente. Criar como PO exige associar a pelo menos 1 produto.
 
 ## Publicar no GitHub (e deixar online)
 
@@ -493,4 +488,3 @@ toda Edge Function, sem elas nunca saírem do lado do servidor.
 ## Pendências / próximos passos combinados
 
 - Exigir que o usuário defina/troque a própria senha no primeiro acesso (por enquanto, quem cria a conta já define a senha diretamente).
-- Permitir que Manager também crie contas de PO/Stakeholder (hoje é exclusivo do Admin, por decisão explícita).
