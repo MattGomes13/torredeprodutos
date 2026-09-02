@@ -228,6 +228,14 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
 }
 @page{ size:landscape; margin:12mm; }
 @media print{
+  /* html/body tem height:100% + overflow-x:hidden — pela regra do CSS
+     Overflow Module, ter só um eixo diferente de "visible" faz o outro
+     eixo virar "auto" automaticamente. Ou seja, isso vira sem querer um
+     contêiner de altura FIXA com rolagem — e a impressão só capturava o
+     que coubesse nessa "janela", cortando todo o resto. Isso é o motivo
+     real do PDF sempre sair com 1 página só, mesmo com a tabela visível.
+     Aqui desfazemos isso só pra impressão, liberando a altura de verdade. */
+  html,body{height:auto!important;overflow:visible!important}
   /* A tabela de épicos (.tbl-wrap) ficava escondida antes — era o maior
      bloco de conteúdo, então sobrava pouca coisa e tudo cabia numa
      página só. Agora ela entra na impressão e paginação normal do
@@ -1155,7 +1163,11 @@ function fecharApresentacao(){
 function exportarApresentacaoPDF(){
   fecharApresentacao();
   if(VIEW !== 'estrategica') setView('estrategica');
-  setTimeout(function(){ window.print(); }, 80);
+  // Espera 2 frames de verdade (não um tempo fixo) pra garantir que o
+  // navegador terminou de desenhar o conteúdo novo antes de imprimir.
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){ window.print(); });
+  });
 }
 function exportarApresentacaoPPT(){
   if(typeof PptxGenJS === 'undefined'){ showToast('Biblioteca de apresentação não carregou. Verifique sua conexão.', 'err'); return; }
