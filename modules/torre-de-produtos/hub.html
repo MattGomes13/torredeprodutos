@@ -146,6 +146,21 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.5px;color:#fff}
 .valrow-total .nm{color:var(--navy);font-weight:800;letter-spacing:.3px;font-size:11px}
 .valrow-total .valamt{font-size:14px;color:var(--navy)}
 
+/* ============ BU LEADER CARDS ============ */
+.bu-leader-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.bu-leader-card{background:var(--bg2);border:1px solid var(--border);border-top:3px solid var(--c,var(--navy));border-radius:12px;padding:16px;box-shadow:var(--sh)}
+.bu-leader-ic{font-size:20px;margin-bottom:8px}
+.bu-leader-lbl{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.bu-leader-nome{font-size:15px;font-weight:800;color:var(--text);margin-bottom:2px}
+.bu-leader-val{font-family:var(--mono);font-size:13px;color:var(--c,var(--navy));font-weight:700}
+
+/* ============ ENTREGAS MENSAIS (gráfico de colunas empilhadas) ============ */
+.entregas-chart{display:flex;align-items:flex-end;gap:6px;height:190px;padding-top:4px}
+.entregas-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;min-width:0}
+.entregas-total{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:4px}
+.entregas-bar{width:70%;height:150px;display:flex;flex-direction:column-reverse;border-radius:3px 3px 0 0;overflow:hidden;background:var(--bg4)}
+.entregas-mes-lbl{font-size:9px;color:var(--dim);margin-top:8px;text-transform:uppercase;letter-spacing:.3px}
+
 .btn-danger-ghost{background:transparent;border:1.5px solid #fecaca;color:var(--red);font-size:10.5px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;transition:.15s}
 .btn-danger-ghost:hover{background:var(--red);color:#fff;border-color:var(--red)}
 
@@ -210,9 +225,9 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
   .topbar-actions,.rail,.tabs,.tbl-wrap,.setup-cfg,footer{display:none!important}
   body{background:#fff}
   .shell{padding:0 12px}
-  .panel,.tot,.wcard{box-shadow:none!important;border:1px solid #ccc!important}
+  .panel,.tot,.wcard,.bu-leader-card{box-shadow:none!important;border:1px solid #ccc!important}
   .sec-hdr{break-after:avoid}
-  .bgrid,#byProductValue,#byBU{break-inside:avoid}
+  .bgrid,#byProductValue,#byBU,#entregasMensais{break-inside:avoid}
 }
 </style>
 </head>
@@ -552,8 +567,8 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
     '<div class="totals" id="totalsRow"></div>'+
     '<div class="sec-hdr"><h2>Valor mapeado por produto</h2><div class="sec-line"></div></div>'+
     '<div id="byProductValue" class="panel" style="margin-bottom:32px"></div>'+
-    '<div class="sec-hdr"><h2>Comparativo por BU</h2><div class="sec-line"></div><span class="cnt">valor, épicos e % concluído por área de negócio</span></div>'+
-    '<div id="byBU" class="panel" style="margin-bottom:32px"></div>'+
+    '<div class="sec-hdr"><h2>Comparativo por BU</h2><div class="sec-line"></div><span class="cnt">destaques por área de negócio</span></div>'+
+    '<div id="byBU" style="margin-bottom:32px"></div>'+
     '<div class="sec-hdr"><h2>Distribuição de épicos</h2><div class="sec-line"></div></div>'+
     '<div class="bgrid">'+
       '<div class="panel"><h3>Épicos por produto</h3><div id="byProduct"></div></div>'+
@@ -567,13 +582,16 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
         '<input class="search" id="fSearch" placeholder="Buscar título, ID, PO..." oninput="onSearchChange(this.value)">'+
       '</div>'+
       '<div style="overflow-x:auto"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>'+
-    '</div>';
+    '</div>'+
+    '<div class="sec-hdr"><h2>Total de entregas por mês</h2><div class="sec-line"></div><span class="cnt">épicos finalizados, por produto</span></div>'+
+    '<div id="entregasMensais" class="panel" style="margin-bottom:12px"></div>';
 
   renderTotals(all);
   renderByProductValue();
   renderByBU();
   renderByProduct();
   renderByStatus(all);
+  renderEntregasMensais();
   renderFilterSelect();
   renderTable();
 }
@@ -757,38 +775,119 @@ function renderByProductValue(){
 // Agrupa os produtos visíveis pela BU (área de negócio) cadastrada em cada
 // produto (Produtos → Gerenciar acesso). Produto sem BU definida entra no
 // grupo "Sem BU definida", pra nada ficar de fora do comparativo.
-function renderByBU(){
+// Agrupa os produtos visíveis pela BU e acha, pra cada métrica, qual BU
+// lidera (maior valor). BU sem nenhum épico numa métrica não concorre
+// (fica null) — assim "0" nunca aparece marcado como "líder".
+function calcBULeaders(){
   var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
   var grupos = {};
   keys.forEach(function(k){
     var p = PRODUCTS[k];
     var bu = (p.bu || '').trim() || 'Sem BU definida';
-    if(!grupos[bu]) grupos[bu] = { nome:bu, produtos:0, epicos:0, valor:0, finalizados:0 };
-    grupos[bu].produtos++;
+    if(!grupos[bu]) grupos[bu] = { nome:bu, epicos:0, finalizados:0, andamento:0, atrasados:0, valor:0 };
     grupos[bu].epicos += p.data.length;
-    grupos[bu].valor += p.data.reduce(function(s,e){return s+(e.valor||0);},0);
     grupos[bu].finalizados += p.data.filter(function(e){return e.status==='Finalizado';}).length;
+    grupos[bu].andamento += p.data.filter(function(e){return e.status==='Em andamento';}).length;
+    grupos[bu].atrasados += p.data.filter(function(e){return e.status==='Atrasado';}).length;
+    grupos[bu].valor += p.data.reduce(function(s,e){return s+(e.valor||0);},0);
   });
-  var lista = Object.keys(grupos).map(function(k){ return grupos[k]; }).sort(function(a,b){return b.valor-a.valor;});
-  var maxV = Math.max.apply(null, lista.map(function(g){return g.valor;}).concat([1]));
-  var grandTotal = lista.reduce(function(s,g){return s+g.valor;},0);
+  var lista = Object.keys(grupos).map(function(k){ return grupos[k]; });
+  function lider(campo){
+    if(!lista.length) return null;
+    var top = lista.reduce(function(a,b){ return (b[campo]>a[campo]) ? b : a; }, lista[0]);
+    return top[campo] > 0 ? top : null;
+  }
+  return {
+    epicos: lider('epicos'),
+    finalizados: lider('finalizados'),
+    andamento: lider('andamento'),
+    atrasados: lider('atrasados'),
+    valor: lider('valor')
+  };
+}
 
-  var rows = lista.map(function(g){
-    var pct = maxV ? (g.valor/maxV*100) : 0;
-    var shareOfTotal = grandTotal ? Math.round(g.valor/grandTotal*100) : 0;
-    var pctConcluido = g.epicos ? Math.round(g.finalizados/g.epicos*100) : 0;
-    return '<div class="valrow">'+
-      '<div class="nm">'+g.nome+' <span style="color:var(--dim);font-weight:400;font-size:10px">('+g.produtos+' produto'+(g.produtos!==1?'s':'')+' · '+g.epicos+' épicos · '+pctConcluido+'% concluído)</span></div>'+
-      '<div class="valbar-track"><div class="valbar-fill" style="width:'+pct+'%;background:#0891b2"></div></div>'+
-      '<div class="valamt">'+fmtBRL(g.valor)+'</div>'+
-      '<div class="valpct">'+shareOfTotal+'%</div>'+
+function renderByBU(){
+  var l = calcBULeaders();
+  function card(icon, cor, label, g, formatarValor){
+    return '<div class="bu-leader-card" style="--c:'+cor+'">'+
+      '<div class="bu-leader-ic">'+icon+'</div>'+
+      '<div class="bu-leader-lbl">'+label+'</div>'+
+      '<div class="bu-leader-nome">'+(g ? g.nome : '—')+'</div>'+
+      '<div class="bu-leader-val">'+(g ? formatarValor(g) : 'sem dados ainda')+'</div>'+
+    '</div>';
+  }
+  document.getElementById('byBU').innerHTML =
+    '<div class="bu-leader-grid">'+
+      card('📦','#2563eb','BU com mais épicos', l.epicos, function(g){return g.epicos+' épicos';})+
+      card('✅','#059669','BU com mais finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
+      card('🔄','#7c3aed','BU com mais em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
+      card('⏱','#dc2626','BU com mais em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
+      card('💰','#d97706','BU com maior faturamento', l.valor, function(g){return fmtBRL(g.valor);})+
+    '</div>';
+}
+
+// Épicos finalizados, agrupados por mês de entrega (usa "entrega", ou
+// "fim" se não tiver) e por produto — vira as pilhas do gráfico.
+function calcEntregasMensais(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var anos = [];
+  keys.forEach(function(k){
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(!isNaN(d.getTime())) anos.push(d.getFullYear());
+    });
+  });
+  var ano = anos.length ? anos.sort(function(a,b){return b-a;})[0] : new Date().getFullYear();
+  var meses = [0,1,2,3,4,5,6,7,8,9,10,11].map(function(){ return {}; });
+  keys.forEach(function(k){
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(isNaN(d.getTime()) || d.getFullYear()!==ano) return;
+      var m = d.getMonth();
+      meses[m][k] = (meses[m][k]||0) + 1;
+    });
+  });
+  return {ano:ano, meses:meses, keys:keys};
+}
+
+function renderEntregasMensais(){
+  var info = calcEntregasMensais();
+  var MESES_LBL = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var totais = info.meses.map(function(m){
+    return Object.keys(m).reduce(function(s,k){return s+m[k];},0);
+  });
+  var maxTotal = Math.max.apply(null, totais.concat([1]));
+  var semDados = totais.every(function(t){return t===0;});
+
+  var colunas = info.meses.map(function(m, mi){
+    var segs = info.keys.filter(function(k){ return m[k]; }).map(function(k){
+      var p = PRODUCTS[k];
+      var h = maxTotal ? (m[k]/maxTotal*100) : 0;
+      return '<div style="height:'+h+'%;background:'+p.color+'" title="'+p.name+': '+m[k]+' entrega(s)"></div>';
+    }).join('');
+    return '<div class="entregas-col">'+
+      '<div class="entregas-total">'+(totais[mi]||'')+'</div>'+
+      '<div class="entregas-bar">'+segs+'</div>'+
+      '<div class="entregas-mes-lbl">'+MESES_LBL[mi]+'</div>'+
     '</div>';
   }).join('');
 
-  document.getElementById('byBU').innerHTML =
-    '<div class="valgrid-hdr"><span>BU</span><span></span><span>Valor mapeado</span><span>Share</span></div>'+
-    (rows || '<div style="color:var(--dim);font-size:11px;padding:10px 0">Nenhum produto visível</div>')+
-    '<div class="valrow valrow-total"><div class="nm">TOTAL DO PORTFÓLIO</div><div></div><div class="valamt">'+fmtBRL(grandTotal)+'</div><div class="valpct">100%</div></div>';
+  var legenda = info.keys.map(function(k){
+    var p = PRODUCTS[k];
+    return '<div class="leg-item"><div class="leg-dot" style="background:'+p.color+'"></div>'+p.name+'</div>';
+  }).join('');
+
+  document.getElementById('entregasMensais').innerHTML = semDados
+    ? '<div style="color:var(--dim);font-size:11.5px;padding:20px 0;text-align:center">Nenhum épico finalizado com data de entrega ainda.</div>'
+    : '<div class="entregas-chart">'+colunas+'</div>'+
+      '<div class="legend" style="flex-direction:row;flex-wrap:wrap;gap:6px 16px;margin-top:16px">'+legenda+'</div>'+
+      '<div style="font-size:10px;color:var(--dim);margin-top:8px">Épicos finalizados por mês de entrega — '+info.ano+'</div>';
 }
 
 function renderByLayer(key){
