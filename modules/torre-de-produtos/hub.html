@@ -228,6 +228,12 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
 }
 @page{ size:landscape; margin:12mm; }
 @media print{
+  /* Por padrão, o navegador não imprime cor de fundo (pra economizar
+     tinta) — como as barras dos gráficos (entregas mensais, valor por
+     produto, distribuição por status etc.) são só "background-color",
+     sem borda, elas ficavam completamente invisíveis no PDF. Isso força
+     a impressão a manter as cores de fundo sempre. */
+  *{ -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; color-adjust:exact!important; }
   /* html/body tem height:100% + overflow-x:hidden — pela regra do CSS
      Overflow Module, ter só um eixo diferente de "visible" faz o outro
      eixo virar "auto" automaticamente. Ou seja, isso vira sem querer um
