@@ -4149,7 +4149,32 @@ list.map(function(p){return'<option value="'+p.year+'" '+(p.year===PROJECT_YEAR?
 // logado + de quem é o PO responsável por este produto.
 var params=new URLSearchParams(window.location.search);
 var productId=params.get('product');
+
+// Se não tem ?product= na URL, ou é um link quebrado, ou (mais provável)
+// este é um arquivo .html EXPORTADO (botão "⬇ Exportar HTML") reaberto
+// localmente — nesse caso os épicos já vêm embutidos na própria var DATA
+// deste arquivo. Mostra eles direto, sem exigir login nem Supabase.
 if(!productId){
+if(DATA && DATA.length>0){
+ACCESS_LEVEL='view';
+document.body.classList.add('view-only');
+document.querySelectorAll('.rm-portal-bar').forEach(function(el){ el.style.display='none'; });
+reconcileTypes();
+buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();applyZoom();
+setSaveInd(true,DATA.length+" epicos (arquivo local)");
+(function rebuildActiveViewOffline(){
+var ganttVisible=document.getElementById("ganttView")&&document.getElementById("ganttView").style.display!=="none";
+var stratVisible=document.getElementById("stratView")&&document.getElementById("stratView").style.display!=="none";
+var listVisible=document.getElementById("listView")&&document.getElementById("listView").style.display!=="none";
+if(ganttVisible){VIEW=2;buildGantt();}
+else if(stratVisible){VIEW=1;applyStratMode();}
+else if(listVisible){VIEW=3;buildList();}
+else{VIEW=0;}
+})();
+var ld0=document.getElementById('rm-loading');
+if(ld0)ld0.remove();
+return;
+}
 document.body.innerHTML='<div style="padding:60px;text-align:center;color:#64748b;font-family:Segoe UI,sans-serif">Nenhum produto informado na URL. <a href="produtos.html">Voltar aos produtos</a></div>';
 return;
 }
