@@ -1005,7 +1005,7 @@ ws["!cols"]=[{wch:22},{wch:38},{wch:16},{wch:14},{wch:18},{wch:16},{wch:11},{wch
 ws["!autofilter"]={ref:"A1:S1"};
 var wb=XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(wb,ws,"Épicos");
-var fname="bankmanager_epicos_"+(new Date().toISOString().slice(0,10))+".xlsx";
+var fname=slugParaArquivo(CURRENT_PRODUCT&&CURRENT_PRODUCT.name)+"_epicos_"+(new Date().toISOString().slice(0,10))+".xlsx";
 XLSX.writeFile(wb,fname);
 showToast("XLS exportado: "+rows.length+" epicos","ok");
 closePresentModal();
@@ -1070,7 +1070,8 @@ slide.addShape("rect",{x:0.35,y:0.28,w:1.05,h:0.32,fill:{color:"E5E7EB"},line:{t
 slide.addText("PARTE "+String(qi+1).padStart(2,"0"),{x:0.35,y:0.28,w:1.05,h:0.32,fontSize:9,bold:true,color:"475569",align:"center",valign:"middle",fontFace:"Arial"});
 // title
 var qLabel=q==="Backlog"?"Backlog":q+" 2026";
-slide.addText([{text:"❖ ",options:{color:NAVY}},{text:"BANKMANAGER — Roadmap "+qLabel+(chunks.length>1?" ("+(ci+1)+"/"+chunks.length+")":""),options:{color:NAVY}}],{x:0.35,y:0.62,w:12.6,h:0.55,fontSize:26,bold:true,fontFace:"Arial",align:"left"});
+var nomeProdutoSlide=(CURRENT_PRODUCT&&CURRENT_PRODUCT.name?CURRENT_PRODUCT.name:"Roadmap").toUpperCase();
+slide.addText([{text:"❖ ",options:{color:NAVY}},{text:nomeProdutoSlide+" — Roadmap "+qLabel+(chunks.length>1?" ("+(ci+1)+"/"+chunks.length+")":""),options:{color:NAVY}}],{x:0.35,y:0.62,w:12.6,h:0.55,fontSize:26,bold:true,fontFace:"Arial",align:"left"});
 slide.addText("Visão das entregas por período: o que já foi entregue, o que está em andamento e o que está planejado.",{x:0.35,y:1.15,w:12.6,h:0.32,fontSize:11.5,color:MUTED,fontFace:"Arial"});
 // table geometry (must match addTable below exactly, to overlay gantt bars)
 var tblX=0.35,tblY=1.62,tblW=12.6;
@@ -1134,7 +1135,7 @@ slide.addText(lbl,{x:0.35+li*chevW+0.12,y:chevY,w:chevW-0.15,h:0.4,fontSize:8,co
 });
 });
 });
-var fname="bankmanager_apresentacao_"+(new Date().toISOString().slice(0,10))+".pptx";
+var fname=slugParaArquivo(CURRENT_PRODUCT&&CURRENT_PRODUCT.name)+"_apresentacao_"+(new Date().toISOString().slice(0,10))+".pptx";
 pres.writeFile({fileName:fname});
 showToast("PPT gerado: "+quarters.length+" quarter(s)","ok");
 closePresentModal();
@@ -1428,6 +1429,15 @@ el.className="save-ind"+(ok?" saved":"");
 el.innerHTML='<div class="dot"></div><span>'+(msg||"")+'</span>';
 }
 // ── EXPORT ────────────────────────────────────────────────────────────────
+// Vira o nome do produto num nome de arquivo seguro (sem espaço/acento/
+// maiúscula) — ex: "Net Finanças" -> "net_financas".
+function slugParaArquivo(nome){
+return (nome||"roadmap").toString()
+.normalize("NFD").replace(/[̀-ͯ]/g,"")
+.toLowerCase()
+.replace(/[^a-z0-9]+/g,"_")
+.replace(/(^_|_$)/g,"") || "roadmap";
+}
 function exportHTML(){
 try{
 var html=document.documentElement.outerHTML;
@@ -1447,7 +1457,8 @@ var url=URL.createObjectURL(blob);
 var a=document.createElement("a");
 var now=new Date();
 var dt=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
-a.href=url;a.download="bankmanager_roadmap_"+dt+".html";
+var nomeArquivo=slugParaArquivo(CURRENT_PRODUCT&&CURRENT_PRODUCT.name);
+a.href=url;a.download=nomeArquivo+"_roadmap_"+dt+".html";
 document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 showToast("Arquivo exportado!","ok");
 }catch(e){showToast("Erro ao exportar: "+e.message,"err");}
