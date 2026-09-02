@@ -251,7 +251,7 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
   .shell{padding:0 12px}
   .panel,.tot,.wcard,.bu-leader-card{box-shadow:none!important;border:1px solid #ccc!important}
   .sec-hdr{break-after:avoid}
-  .bgrid,#byProductValue,#byBU,#entregasMensais{break-inside:avoid}
+  .bgrid,#byProductValue,#byBU,#entregasMensais,#valorMensal{break-inside:avoid}
   /* Seções minimizadas na tela sempre saem abertas na versão impressa/PDF */
   .sec-body{display:block!important}
   .sec-toggle-ic{display:none}
@@ -636,6 +636,8 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
       '</div>') +
     secaoColapsavel('estr-entregas', 'Total de entregas por mês', '<span class="cnt">épicos finalizados, por produto</span>',
       '<div id="entregasMensais" class="panel"></div>') +
+    secaoColapsavel('estr-valormes', 'Valor entregue por mês', '<span class="cnt">valor de épicos finalizados, por produto</span>',
+      '<div id="valorMensal" class="panel"></div>') +
     secaoColapsavel('estr-epicos', 'Épicos', '',
       '<div class="tbl-wrap">'+
         '<div class="tbl-hdr">'+
@@ -652,6 +654,7 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
   renderByProduct();
   renderByStatus(all);
   renderEntregasMensais();
+  renderValorMensal();
   renderFilterSelect();
   renderTable();
 }
@@ -952,6 +955,78 @@ function renderEntregasMensais(){
     : '<div class="entregas-chart">'+colunas+'</div>'+
       '<div class="legend" style="flex-direction:row;flex-wrap:wrap;gap:6px 16px;margin-top:16px">'+legenda+'</div>'+
       '<div style="font-size:10px;color:var(--dim);margin-top:8px">Épicos finalizados por mês de entrega — '+info.ano+'</div>';
+}
+
+// Mesma ideia do gráfico de entregas, só que somando o campo "valor" dos
+// épicos finalizados em vez de contar 1 por épico — mostra quanto valor
+// foi entregue mês a mês, empilhado por produto.
+function calcValorMensal(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var anos = [];
+  keys.forEach(function(k){
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(!isNaN(d.getTime())) anos.push(d.getFullYear());
+    });
+  });
+  var ano = anos.length ? anos.sort(function(a,b){return b-a;})[0] : new Date().getFullYear();
+  var meses = [0,1,2,3,4,5,6,7,8,9,10,11].map(function(){ return {}; });
+  keys.forEach(function(k){
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(isNaN(d.getTime()) || d.getFullYear()!==ano) return;
+      var m = d.getMonth();
+      meses[m][k] = (meses[m][k]||0) + (e.valor||0);
+    });
+  });
+  return {ano:ano, meses:meses, keys:keys};
+}
+// Versão compacta do valor (1.9k, 2.3M) — só pro rótulo enxuto acima de
+// cada coluna; o valor cheio continua no title (aparece ao passar o mouse).
+function fmtBRLCurto(v){
+  v = v||0;
+  if(v>=1000000) return 'R$'+(v/1000000).toFixed(1).replace('.0','')+'M';
+  if(v>=1000) return 'R$'+(v/1000).toFixed(1).replace('.0','')+'k';
+  return v>0 ? 'R$'+Math.round(v) : '';
+}
+function renderValorMensal(){
+  var info = calcValorMensal();
+  var MESES_LBL = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var totais = info.meses.map(function(m){
+    return Object.keys(m).reduce(function(s,k){return s+m[k];},0);
+  });
+  var maxTotal = Math.max.apply(null, totais.concat([1]));
+  var semDados = totais.every(function(t){return t===0;});
+
+  var colunas = info.meses.map(function(m, mi){
+    var segs = info.keys.filter(function(k){ return m[k]; }).map(function(k){
+      var p = PRODUCTS[k];
+      var h = maxTotal ? (m[k]/maxTotal*100) : 0;
+      return '<div style="height:'+h+'%;background:'+p.color+'" title="'+p.name+': '+fmtBRL(m[k])+'"></div>';
+    }).join('');
+    return '<div class="entregas-col">'+
+      '<div class="entregas-total">'+fmtBRLCurto(totais[mi])+'</div>'+
+      '<div class="entregas-bar">'+segs+'</div>'+
+      '<div class="entregas-mes-lbl">'+MESES_LBL[mi]+'</div>'+
+    '</div>';
+  }).join('');
+
+  var legenda = info.keys.map(function(k){
+    var p = PRODUCTS[k];
+    return '<div class="leg-item"><div class="leg-dot" style="background:'+p.color+'"></div>'+p.name+'</div>';
+  }).join('');
+
+  document.getElementById('valorMensal').innerHTML = semDados
+    ? '<div style="color:var(--dim);font-size:11.5px;padding:20px 0;text-align:center">Nenhum épico finalizado com valor e data de entrega ainda.</div>'
+    : '<div class="entregas-chart">'+colunas+'</div>'+
+      '<div class="legend" style="flex-direction:row;flex-wrap:wrap;gap:6px 16px;margin-top:16px">'+legenda+'</div>'+
+      '<div style="font-size:10px;color:var(--dim);margin-top:8px">Valor de épicos finalizados por mês de entrega — '+info.ano+'</div>';
 }
 
 function renderByLayer(key){
