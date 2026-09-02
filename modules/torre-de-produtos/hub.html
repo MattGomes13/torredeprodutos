@@ -109,6 +109,11 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.5px;color:#fff}
 .sec-hdr h2{font-size:16px;color:var(--navy);font-weight:800}
 .sec-hdr .cnt{font-family:var(--mono);font-size:11px;color:var(--dim)}
 .sec-line{flex:1;height:1px;background:var(--border)}
+.sec-hdr-toggle{cursor:pointer;user-select:none}
+.sec-hdr-toggle:hover h2{color:var(--navy2)}
+.sec-toggle-ic{font-size:11px;color:var(--dim);flex-shrink:0;width:12px;text-align:center}
+.sec-hdr-toggle:hover .sec-toggle-ic{color:var(--navy)}
+.sec-body{margin-bottom:32px}
 
 /* ============ TOTALIZERS ============ */
 .totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:32px}
@@ -228,6 +233,10 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
   .panel,.tot,.wcard,.bu-leader-card{box-shadow:none!important;border:1px solid #ccc!important}
   .sec-hdr{break-after:avoid}
   .bgrid,#byProductValue,#byBU,#entregasMensais{break-inside:avoid}
+  /* Seções minimizadas na tela sempre saem abertas na versão impressa/PDF */
+  .sec-body{display:block!important}
+  .sec-toggle-ic{display:none}
+  .sec-hdr-toggle{cursor:default}
 }
 </style>
 </head>
@@ -517,6 +526,31 @@ function renderTabs(){
 }
 
 /* ============================================================
+   SEÇÕES COLAPSÁVEIS (minimizar cada bloco da Visão Estratégica /
+   Produto individual). O estado (o que está minimizado) fica em memória
+   e sobrevive a um re-render (ex: clicar em "Atualizar"), mas reseta se
+   a página for recarregada.
+   ============================================================ */
+var SECOES_COLAPSADAS = {};
+function secaoColapsavel(id, titulo, extraHdrHtml, bodyHtml){
+  var colapsada = !!SECOES_COLAPSADAS[id];
+  return '<div class="sec-hdr sec-hdr-toggle" onclick="toggleSecao(\''+id+'\')">'+
+      '<span class="sec-toggle-ic">'+(colapsada?'▸':'▾')+'</span>'+
+      '<h2>'+titulo+'</h2><div class="sec-line"></div>'+(extraHdrHtml||'')+
+    '</div>'+
+    '<div class="sec-body" id="secBody-'+id+'"'+(colapsada?' style="display:none"':'')+'>'+bodyHtml+'</div>';
+}
+function toggleSecao(id){
+  SECOES_COLAPSADAS[id] = !SECOES_COLAPSADAS[id];
+  var body = document.getElementById('secBody-'+id);
+  if(!body) return;
+  body.style.display = SECOES_COLAPSADAS[id] ? 'none' : '';
+  var hdr = body.previousElementSibling;
+  var ic = hdr && hdr.querySelector('.sec-toggle-ic');
+  if(ic) ic.textContent = SECOES_COLAPSADAS[id] ? '▸' : '▾';
+}
+
+/* ============================================================
    RENDER: DASHBOARD
    ============================================================ */
 function render(){
@@ -563,28 +597,28 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
   var all = allVisibleData();
 
   area.innerHTML = tabsHtml +
-    '<div class="sec-hdr"><h2>Visão financeira consolidada</h2><div class="sec-line"></div><span class="cnt">'+visibleKeys.length+' produtos</span></div>'+
-    '<div class="totals" id="totalsRow"></div>'+
-    '<div class="sec-hdr"><h2>Valor mapeado por produto</h2><div class="sec-line"></div></div>'+
-    '<div id="byProductValue" class="panel" style="margin-bottom:32px"></div>'+
-    '<div class="sec-hdr"><h2>Comparativo por Produto</h2><div class="sec-line"></div><span class="cnt">destaques por produto</span></div>'+
-    '<div id="byBU" style="margin-bottom:32px"></div>'+
-    '<div class="sec-hdr"><h2>Distribuição de épicos</h2><div class="sec-line"></div></div>'+
-    '<div class="bgrid">'+
-      '<div class="panel"><h3>Épicos por produto</h3><div id="byProduct"></div></div>'+
-      '<div class="panel"><h3>Status geral</h3><div id="byStatus" class="donutwrap"></div></div>'+
-    '</div>'+
-    '<div class="sec-hdr"><h2>Épicos</h2><div class="sec-line"></div></div>'+
-    '<div class="tbl-wrap">'+
-      '<div class="tbl-hdr">'+
-        '<h3>Tabela combinada</h3>'+
-        '<select class="sel" id="fProduct" onchange="onFilterChange()"></select>'+
-        '<input class="search" id="fSearch" placeholder="Buscar título, ID, PO..." oninput="onSearchChange(this.value)">'+
-      '</div>'+
-      '<div style="overflow-x:auto"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>'+
-    '</div>'+
-    '<div class="sec-hdr"><h2>Total de entregas por mês</h2><div class="sec-line"></div><span class="cnt">épicos finalizados, por produto</span></div>'+
-    '<div id="entregasMensais" class="panel" style="margin-bottom:12px"></div>';
+    secaoColapsavel('estr-financeiro', 'Visão financeira consolidada', '<span class="cnt">'+visibleKeys.length+' produtos</span>',
+      '<div class="totals" id="totalsRow"></div>') +
+    secaoColapsavel('estr-valorproduto', 'Valor mapeado por produto', '',
+      '<div id="byProductValue" class="panel"></div>') +
+    secaoColapsavel('estr-comparativo', 'Comparativo por Produto', '<span class="cnt">destaques por produto</span>',
+      '<div id="byBU"></div>') +
+    secaoColapsavel('estr-distribuicao', 'Distribuição de épicos', '',
+      '<div class="bgrid">'+
+        '<div class="panel"><h3>Épicos por produto</h3><div id="byProduct"></div></div>'+
+        '<div class="panel"><h3>Status geral</h3><div id="byStatus" class="donutwrap"></div></div>'+
+      '</div>') +
+    secaoColapsavel('estr-entregas', 'Total de entregas por mês', '<span class="cnt">épicos finalizados, por produto</span>',
+      '<div id="entregasMensais" class="panel"></div>') +
+    secaoColapsavel('estr-epicos', 'Épicos', '',
+      '<div class="tbl-wrap">'+
+        '<div class="tbl-hdr">'+
+          '<h3>Tabela combinada</h3>'+
+          '<select class="sel" id="fProduct" onchange="onFilterChange()"></select>'+
+          '<input class="search" id="fSearch" placeholder="Buscar título, ID, PO..." oninput="onSearchChange(this.value)">'+
+        '</div>'+
+        '<div style="overflow-x:auto"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>'+
+      '</div>');
 
   renderTotals(all);
   renderByProductValue();
@@ -609,20 +643,20 @@ function renderProdutoIndividual(area, tabsHtml, key){
       '<span class="cnt">'+all.length+' épicos</span>'+
       '<a class="btn-danger-ghost" style="text-decoration:none;display:inline-block" href="roadmap.html?product='+key+'">Abrir roadmap completo →</a>'+
     '</div>'+
-    '<div class="totals" id="totalsRow"></div>'+
-    '<div class="sec-hdr"><h2>Distribuição</h2><div class="sec-line"></div></div>'+
-    '<div class="bgrid">'+
-      '<div class="panel"><h3>Layers / Tipos</h3><div id="byProduct"></div></div>'+
-      '<div class="panel"><h3>Status</h3><div id="byStatus" class="donutwrap"></div></div>'+
-    '</div>'+
-    '<div class="sec-hdr"><h2>Épicos de '+p.name+'</h2><div class="sec-line"></div></div>'+
-    '<div class="tbl-wrap">'+
-      '<div class="tbl-hdr">'+
-        '<h3>Tabela do produto</h3>'+
-        '<input class="search" id="fSearch" placeholder="Buscar título, ID, PO..." oninput="onSearchChange(this.value)">'+
-      '</div>'+
-      '<div style="overflow-x:auto"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>'+
-    '</div>';
+    '<div class="totals" id="totalsRow" style="margin-bottom:32px"></div>'+
+    secaoColapsavel('prod-distribuicao', 'Distribuição', '',
+      '<div class="bgrid">'+
+        '<div class="panel"><h3>Layers / Tipos</h3><div id="byProduct"></div></div>'+
+        '<div class="panel"><h3>Status</h3><div id="byStatus" class="donutwrap"></div></div>'+
+      '</div>') +
+    secaoColapsavel('prod-epicos', 'Épicos de '+p.name, '',
+      '<div class="tbl-wrap">'+
+        '<div class="tbl-hdr">'+
+          '<h3>Tabela do produto</h3>'+
+          '<input class="search" id="fSearch" placeholder="Buscar título, ID, PO..." oninput="onSearchChange(this.value)">'+
+        '</div>'+
+        '<div style="overflow-x:auto"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>'+
+      '</div>');
 
   renderTotals(all);
   renderByLayer(key);
