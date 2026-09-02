@@ -567,7 +567,7 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
     '<div class="totals" id="totalsRow"></div>'+
     '<div class="sec-hdr"><h2>Valor mapeado por produto</h2><div class="sec-line"></div></div>'+
     '<div id="byProductValue" class="panel" style="margin-bottom:32px"></div>'+
-    '<div class="sec-hdr"><h2>Comparativo por BU</h2><div class="sec-line"></div><span class="cnt">destaques por área de negócio</span></div>'+
+    '<div class="sec-hdr"><h2>Comparativo por Produto</h2><div class="sec-line"></div><span class="cnt">destaques por produto</span></div>'+
     '<div id="byBU" style="margin-bottom:32px"></div>'+
     '<div class="sec-hdr"><h2>Distribuição de épicos</h2><div class="sec-line"></div></div>'+
     '<div class="bgrid">'+
@@ -778,20 +778,23 @@ function renderByProductValue(){
 // Agrupa os produtos visíveis pela BU e acha, pra cada métrica, qual BU
 // lidera (maior valor). BU sem nenhum épico numa métrica não concorre
 // (fica null) — assim "0" nunca aparece marcado como "líder".
-function calcBULeaders(){
+// Compara diretamente por produto (Bankmanager, Net Finanças, Luna...),
+// achando quem lidera cada métrica. Cada card usa a cor do próprio
+// produto líder, então cada um tem a "cara" do produto que está na frente.
+function calcProdutoLeaders(){
   var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
-  var grupos = {};
-  keys.forEach(function(k){
+  var lista = keys.map(function(k){
     var p = PRODUCTS[k];
-    var bu = (p.bu || '').trim() || 'Sem BU definida';
-    if(!grupos[bu]) grupos[bu] = { nome:bu, epicos:0, finalizados:0, andamento:0, atrasados:0, valor:0 };
-    grupos[bu].epicos += p.data.length;
-    grupos[bu].finalizados += p.data.filter(function(e){return e.status==='Finalizado';}).length;
-    grupos[bu].andamento += p.data.filter(function(e){return e.status==='Em andamento';}).length;
-    grupos[bu].atrasados += p.data.filter(function(e){return e.status==='Atrasado';}).length;
-    grupos[bu].valor += p.data.reduce(function(s,e){return s+(e.valor||0);},0);
+    return {
+      nome: p.name,
+      color: p.color,
+      epicos: p.data.length,
+      finalizados: p.data.filter(function(e){return e.status==='Finalizado';}).length,
+      andamento: p.data.filter(function(e){return e.status==='Em andamento';}).length,
+      atrasados: p.data.filter(function(e){return e.status==='Atrasado';}).length,
+      valor: p.data.reduce(function(s,e){return s+(e.valor||0);},0)
+    };
   });
-  var lista = Object.keys(grupos).map(function(k){ return grupos[k]; });
   function lider(campo){
     if(!lista.length) return null;
     var top = lista.reduce(function(a,b){ return (b[campo]>a[campo]) ? b : a; }, lista[0]);
@@ -807,8 +810,9 @@ function calcBULeaders(){
 }
 
 function renderByBU(){
-  var l = calcBULeaders();
-  function card(icon, cor, label, g, formatarValor){
+  var l = calcProdutoLeaders();
+  function card(icon, label, g, formatarValor){
+    var cor = g ? g.color : '#94a3b8';
     return '<div class="bu-leader-card" style="--c:'+cor+'">'+
       '<div class="bu-leader-ic">'+icon+'</div>'+
       '<div class="bu-leader-lbl">'+label+'</div>'+
@@ -818,11 +822,11 @@ function renderByBU(){
   }
   document.getElementById('byBU').innerHTML =
     '<div class="bu-leader-grid">'+
-      card('📦','#2563eb','BU com mais épicos', l.epicos, function(g){return g.epicos+' épicos';})+
-      card('✅','#059669','BU com mais finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
-      card('🔄','#7c3aed','BU com mais em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
-      card('⏱','#dc2626','BU com mais em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
-      card('💰','#d97706','BU com maior faturamento', l.valor, function(g){return fmtBRL(g.valor);})+
+      card('📦','Produto com mais épicos', l.epicos, function(g){return g.epicos+' épicos';})+
+      card('✅','Produto com mais finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
+      card('🔄','Produto com mais em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
+      card('⏱','Produto com mais em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
+      card('💰','Produto com maior faturamento', l.valor, function(g){return fmtBRL(g.valor);})+
     '</div>';
 }
 
@@ -1143,31 +1147,25 @@ function exportarApresentacaoPPT(){
     s2.addText(k[1], {x:x+0.3,y:y+0.55,w:5.4,h:0.7,fontSize:24,bold:true,color:NAVY,fontFace:'Arial'});
   });
 
-  // Slide 3 — comparativo por BU
-  var grupos = {};
-  keys.forEach(function(k){
-    var p = PRODUCTS[k];
-    var bu = (p.bu||'').trim() || 'Sem BU definida';
-    if(!grupos[bu]) grupos[bu] = {nome:bu, produtos:0, epicos:0, valor:0, finalizados:0};
-    grupos[bu].produtos++;
-    grupos[bu].epicos += p.data.length;
-    grupos[bu].valor += p.data.reduce(function(s,e){return s+(e.valor||0);},0);
-    grupos[bu].finalizados += p.data.filter(function(e){return e.status==='Finalizado';}).length;
-  });
-  var listaBU = Object.keys(grupos).map(function(k){return grupos[k];}).sort(function(a,b){return b.valor-a.valor;});
+  // Slide 3 — destaques por produto (mesmos 5 líderes mostrados no Hub)
+  var lideres = calcProdutoLeaders();
   var s3 = pres.addSlide();
-  s3.addText('Comparativo por BU', {x:0.35,y:0.3,w:12.6,h:0.6,fontSize:24,bold:true,color:NAVY,fontFace:'Arial'});
-  var rows3 = [['BU','Produtos','Épicos','% Concluído','Valor mapeado'].map(function(h){
+  s3.addText('Destaques por Produto', {x:0.35,y:0.3,w:12.6,h:0.6,fontSize:24,bold:true,color:NAVY,fontFace:'Arial'});
+  var rows3 = [['Métrica','Produto líder','Valor'].map(function(h){
     return {text:h,options:{bold:true,color:'FFFFFF',fill:{color:NAVY},fontSize:11,align:'center',valign:'middle',fontFace:'Arial'}};
   })];
-  listaBU.forEach(function(g){
-    var pctC = g.epicos ? Math.round(g.finalizados/g.epicos*100) : 0;
+  [
+    ['Mais épicos', lideres.epicos, function(g){return g.epicos+' épicos';}],
+    ['Mais finalizados', lideres.finalizados, function(g){return g.finalizados+' épicos';}],
+    ['Mais em andamento', lideres.andamento, function(g){return g.andamento+' épicos';}],
+    ['Mais em atraso', lideres.atrasados, function(g){return g.atrasados+' épicos';}],
+    ['Maior faturamento', lideres.valor, function(g){return fmtBRL(g.valor);}]
+  ].forEach(function(row){
+    var label = row[0], g = row[1], formatar = row[2];
     rows3.push([
-      {text:g.nome,options:{fontSize:11,fontFace:'Arial',align:'left',valign:'middle',fill:{color:'FFFFFF'}}},
-      {text:String(g.produtos),options:{fontSize:11,fontFace:'Arial',align:'center',valign:'middle',fill:{color:'FFFFFF'}}},
-      {text:String(g.epicos),options:{fontSize:11,fontFace:'Arial',align:'center',valign:'middle',fill:{color:'FFFFFF'}}},
-      {text:pctC+'%',options:{fontSize:11,fontFace:'Arial',align:'center',valign:'middle',fill:{color:'FFFFFF'}}},
-      {text:fmtBRL(g.valor),options:{fontSize:11,fontFace:'Arial',align:'right',valign:'middle',fill:{color:'FFFFFF'}}}
+      {text:label,options:{fontSize:11,fontFace:'Arial',align:'left',valign:'middle',fill:{color:'FFFFFF'}}},
+      {text:g?g.nome:'—',options:{bold:true,fontSize:11,fontFace:'Arial',align:'left',valign:'middle',fill:{color:'FFFFFF'},color:g?g.color.replace('#',''):'94A3B8'}},
+      {text:g?formatar(g):'sem dados',options:{fontSize:11,fontFace:'Arial',align:'right',valign:'middle',fill:{color:'FFFFFF'}}}
     ]);
   });
   s3.addTable(rows3, {x:0.35,y:1.2,w:12.6,border:{type:'solid',color:'D1D5DB',pt:0.5},autoPage:false,valign:'middle'});
