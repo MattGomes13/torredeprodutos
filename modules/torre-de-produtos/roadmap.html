@@ -636,6 +636,15 @@ body.view-only #layer-det-overlay .modal-body{
   pointer-events:none;
   opacity:.7;
 }
+/* Modo offline (arquivo exportado reaberto sem login): pode editar
+   normalmente, só escondemos o que depende do Supabase (não faz sentido
+   sem um produto online do outro lado — "Exportar HTML" continua visível,
+   é como o arquivo editado volta pra quem vai reimportar). */
+body.offline-mode [onclick="saveEdits()"],
+body.offline-mode [onclick="triggerImport()"],
+body.offline-mode [onclick="openClearAllModal()"]{
+  display:none !important;
+}
 body.view-only .logo-slot{cursor:default;pointer-events:none}
 body.view-only .brand-title{cursor:default;pointer-events:none}
 </style>
@@ -929,7 +938,12 @@ var DATA=[];
 // ── INTEGRAÇÃO COM O PORTAL (produto atual + nível de acesso) ──────────────
 var CURRENT_PRODUCT=null; // registro da tabela "products" no Supabase
 var ACCESS_LEVEL='view';  // 'admin' | 'po' | 'view'
-function podeEditar(){ return ACCESS_LEVEL==='admin'||ACCESS_LEVEL==='po'; }
+// Arquivo .html exportado, reaberto sem internet/login: pode editar
+// (adicionar/editar/excluir épico, mexer em layers) normalmente, só que
+// tudo fica só no arquivo — quem editar reenvia o .html (Exportar HTML)
+// pra alguém reimportar depois. Ver initLoad().
+var MODO_OFFLINE=false;
+function podeEditar(){ return MODO_OFFLINE || ACCESS_LEVEL==='admin' || ACCESS_LEVEL==='po'; }
 var VIEW=0;
 var ZOOM=1.0;
 var ZOOM_STEPS=[0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.5];
@@ -1005,7 +1019,7 @@ ws["!cols"]=[{wch:22},{wch:38},{wch:16},{wch:14},{wch:18},{wch:16},{wch:11},{wch
 ws["!autofilter"]={ref:"A1:S1"};
 var wb=XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(wb,ws,"Épicos");
-var fname=slugParaArquivo(CURRENT_PRODUCT&&CURRENT_PRODUCT.name)+"_epicos_"+(new Date().toISOString().slice(0,10))+".xlsx";
+var fname=slugParaArquivo(nomeProdutoAtual())+"_epicos_"+(new Date().toISOString().slice(0,10))+".xlsx";
 XLSX.writeFile(wb,fname);
 showToast("XLS exportado: "+rows.length+" epicos","ok");
 closePresentModal();
@@ -1070,7 +1084,7 @@ slide.addShape("rect",{x:0.35,y:0.28,w:1.05,h:0.32,fill:{color:"E5E7EB"},line:{t
 slide.addText("PARTE "+String(qi+1).padStart(2,"0"),{x:0.35,y:0.28,w:1.05,h:0.32,fontSize:9,bold:true,color:"475569",align:"center",valign:"middle",fontFace:"Arial"});
 // title
 var qLabel=q==="Backlog"?"Backlog":q+" 2026";
-var nomeProdutoSlide=(CURRENT_PRODUCT&&CURRENT_PRODUCT.name?CURRENT_PRODUCT.name:"Roadmap").toUpperCase();
+var nomeProdutoSlide=nomeProdutoAtual().toUpperCase();
 slide.addText([{text:"❖ ",options:{color:NAVY}},{text:nomeProdutoSlide+" — Roadmap "+qLabel+(chunks.length>1?" ("+(ci+1)+"/"+chunks.length+")":""),options:{color:NAVY}}],{x:0.35,y:0.62,w:12.6,h:0.55,fontSize:26,bold:true,fontFace:"Arial",align:"left"});
 slide.addText("Visão das entregas por período: o que já foi entregue, o que está em andamento e o que está planejado.",{x:0.35,y:1.15,w:12.6,h:0.32,fontSize:11.5,color:MUTED,fontFace:"Arial"});
 // table geometry (must match addTable below exactly, to overlay gantt bars)
@@ -1135,7 +1149,7 @@ slide.addText(lbl,{x:0.35+li*chevW+0.12,y:chevY,w:chevW-0.15,h:0.4,fontSize:8,co
 });
 });
 });
-var fname=slugParaArquivo(CURRENT_PRODUCT&&CURRENT_PRODUCT.name)+"_apresentacao_"+(new Date().toISOString().slice(0,10))+".pptx";
+var fname=slugParaArquivo(nomeProdutoAtual())+"_apresentacao_"+(new Date().toISOString().slice(0,10))+".pptx";
 pres.writeFile({fileName:fname});
 showToast("PPT gerado: "+quarters.length+" quarter(s)","ok");
 closePresentModal();
@@ -1398,7 +1412,13 @@ var URG_OPTS=["Alta","Média","Baixa","—"];
 // excluir/importar continuam funcionando exatamente como antes, só que
 // persistindo no banco em vez do localStorage.
 async function saveEdits(){
-if(!CURRENT_PRODUCT){showToast("Produto não carregado","err");return;}
+if(!CURRENT_PRODUCT){
+// Modo offline: não tem servidor pra salvar — os dados já estão certos
+// aqui na memória/tela, só atualiza o indicador. "⬇ Exportar HTML" é
+// quem realmente grava isso num arquivo pra reenviar.
+setSaveInd(true,DATA.length+" epicos (neste arquivo)");
+return;
+}
 if(!podeEditar()){showToast("Você está em modo somente-leitura","err");return;}
 try{
 var {error}=await supabaseClient.rpc('replace_epics',{p_product_id:CURRENT_PRODUCT.id,p_items:DATA});
@@ -1431,6 +1451,14 @@ el.innerHTML='<div class="dot"></div><span>'+(msg||"")+'</span>';
 // ── EXPORT ────────────────────────────────────────────────────────────────
 // Vira o nome do produto num nome de arquivo seguro (sem espaço/acento/
 // maiúscula) — ex: "Net Finanças" -> "net_financas".
+// Nome do produto pra usar em nome de arquivo/título de slide: usa
+// CURRENT_PRODUCT quando existe (modo online); no modo offline (sem
+// produto carregado do Supabase) cai pro texto que já está na tela.
+function nomeProdutoAtual(){
+return (CURRENT_PRODUCT && CURRENT_PRODUCT.name)
+|| (document.querySelector(".brand-title")||{}).textContent
+|| "roadmap";
+}
 function slugParaArquivo(nome){
 return (nome||"roadmap").toString()
 .normalize("NFD").replace(/[̀-ͯ]/g,"")
@@ -1457,7 +1485,7 @@ var url=URL.createObjectURL(blob);
 var a=document.createElement("a");
 var now=new Date();
 var dt=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
-var nomeArquivo=slugParaArquivo(CURRENT_PRODUCT&&CURRENT_PRODUCT.name);
+var nomeArquivo=slugParaArquivo(nomeProdutoAtual());
 a.href=url;a.download=nomeArquivo+"_roadmap_"+dt+".html";
 document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 showToast("Arquivo exportado!","ok");
@@ -3948,6 +3976,13 @@ var novo=prompt("Nome do produto:",cur);
 if(novo===null)return;
 novo=novo.trim();
 if(!novo)return;
+if(!CURRENT_PRODUCT){
+// Modo offline: só muda na tela mesmo — "Exportar HTML" já leva esse
+// texto junto, do jeito que estiver no momento do export.
+applyProjectName(novo,(document.querySelector(".brand-sub")||{}).textContent);
+showToast("Nome atualizado neste arquivo","ok");
+return;
+}
 try{
 var {error}=await supabaseClient.from('products').update({name:novo}).eq('id',CURRENT_PRODUCT.id);
 if(error)throw error;
@@ -4156,12 +4191,17 @@ var productId=params.get('product');
 // deste arquivo. Mostra eles direto, sem exigir login nem Supabase.
 if(!productId){
 if(DATA && DATA.length>0){
-ACCESS_LEVEL='view';
-document.body.classList.add('view-only');
+// Modo offline: edita normalmente (add/editar/excluir épico, layers,
+// cores, logo), mas nada disso tenta falar com o Supabase — tudo fica
+// só neste arquivo. "💾 Salvar"/"⬆ Importar"/"🗑 Limpar" ficam ocultos
+// (não fazem sentido sem um produto online do outro lado); "⬇ Exportar
+// HTML" continua disponível — é como quem editou devolve o arquivo.
+MODO_OFFLINE=true;
+document.body.classList.add('offline-mode');
 document.querySelectorAll('.rm-portal-bar').forEach(function(el){ el.style.display='none'; });
 reconcileTypes();
 buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();applyZoom();
-setSaveInd(true,DATA.length+" epicos (arquivo local)");
+setSaveInd(true,DATA.length+" epicos (neste arquivo)");
 (function rebuildActiveViewOffline(){
 var ganttVisible=document.getElementById("ganttView")&&document.getElementById("ganttView").style.display!=="none";
 var stratVisible=document.getElementById("stratView")&&document.getElementById("stratView").style.display!=="none";
