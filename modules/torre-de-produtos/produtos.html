@@ -119,11 +119,19 @@ async function carregarProdutos(){
       : 'Nenhum produto liberado para você ainda — fale com o administrador do portal.';
   }
 
+  // Nível de acesso do usuário logado em cada produto (só importa pra
+  // quem não é admin/manager — esses já veem/editam tudo de qualquer jeito).
+  var meuAcessoMap = {};
+  if(!IS_ADMIN){
+    var { data: meuAcesso } = await supabaseClient.from('product_stakeholders').select('product_id,pode_editar').eq('user_id', CURRENT_USER.id);
+    (meuAcesso||[]).forEach(function(r){ meuAcessoMap[r.product_id] = r.pode_editar; });
+  }
+
   var html = produtos.map(function(p){
-    var isPo = p.po_user_id === CURRENT_USER.id;
+    var souEditor = meuAcessoMap[p.id] === true;
     var tag = IS_ADMIN
       ? '<span class="tag admin">'+(USER_ROLE==='manager'?'Manager':'Admin')+' — vê tudo</span>'
-      : (isPo ? '<span class="tag po">Você é o PO</span>' : '<span class="tag view">Você acompanha (visualização)</span>');
+      : (souEditor ? '<span class="tag po">Você pode editar</span>' : '<span class="tag view">Você acompanha (visualização)</span>');
     var manageBtn = IS_ADMIN ? '<button onclick="abrirGerenciarAcesso(\''+p.id+'\')">Gerenciar acesso</button>' : '';
     var delBtn = IS_ADMIN ? '<button class="danger" onclick="'+escapeHtml('excluirProduto('+jsStr(p.id)+','+jsStr(p.name)+')')+'">Excluir</button>' : '';
     return '<div class="prod-card">'+
@@ -162,10 +170,14 @@ async function abrirGerenciarAcesso(productId){
   var { data: produto } = await supabaseClient.from('products').select('*').eq('id', productId).single();
   var usersMap = await getUsersMap();
   var userIds = Object.keys(usersMap);
-  var { data: stakeholderRows } = await supabaseClient.from('product_stakeholders').select('user_id').eq('product_id', productId);
-  var currentStakeholders = {};
-  (stakeholderRows||[]).forEach(function(r){ currentStakeholders[r.user_id]=true; });
+  var { data: accessRows } = await supabaseClient.from('product_stakeholders').select('user_id,pode_editar').eq('product_id', productId);
+  var accessMap = {};
+  (accessRows||[]).forEach(function(r){ accessMap[r.user_id] = r.pode_editar ? 'edit' : 'view'; });
 
+  // Cada usuário pode ser associado a mais de um produto, e o nível de
+  // acesso (editar ou só visualizar) é definido por produto — não existe
+  // mais "o PO" único de um produto: vários usuários (normalmente POs)
+  // podem ter edição no mesmo produto ao mesmo tempo.
   var overlay = document.createElement('div');
   overlay.className = 'pm-overlay';
   overlay.innerHTML =
@@ -174,15 +186,18 @@ async function abrirGerenciarAcesso(productId){
       '<div class="pm-modal-body">'+
         '<label class="pm-label">BU (área de negócio)</label>'+
         '<input type="text" id="pm-bu" value="'+escapeHtml(produto.bu||'')+'" placeholder="ex: Cartões, Crédito, Meios de Pagamento..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12.5px;font-family:inherit;margin-bottom:14px">'+
-        '<label class="pm-label">PO responsável por este produto</label>'+
-        '<select id="pm-po">'+
-          '<option value="">— nenhum definido —</option>'+
-          userIds.map(function(id){ return '<option value="'+id+'" '+(produto.po_user_id===id?'selected':'')+'>'+escapeHtml(usersMap[id])+'</option>'; }).join('')+
-        '</select>'+
-        '<label class="pm-label">Stakeholders com acesso de visualização</label>'+
-        '<div class="pm-checklist">'+
+        '<label class="pm-label">Acesso por usuário (PO/stakeholder — editar ou só visualizar)</label>'+
+        '<div class="pm-checklist" style="max-height:260px">'+
           (userIds.length ? userIds.map(function(id){
-            return '<label class="pm-check"><input type="checkbox" value="'+id+'" '+(currentStakeholders[id]?'checked':'')+'> '+escapeHtml(usersMap[id])+'</label>';
+            var nivel = accessMap[id] || '';
+            return '<div class="pm-access-row" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0">'+
+              '<span style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(usersMap[id])+'</span>'+
+              '<select class="pm-access-sel" data-uid="'+id+'" style="flex:0 0 auto;width:172px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:11.5px;font-family:inherit">'+
+                '<option value="" '+(nivel===''?'selected':'')+'>Sem acesso</option>'+
+                '<option value="view" '+(nivel==='view'?'selected':'')+'>Só visualizar</option>'+
+                '<option value="edit" '+(nivel==='edit'?'selected':'')+'>Editar e visualizar</option>'+
+              '</select>'+
+            '</div>';
           }).join('') : '<span style="color:var(--dim);font-size:11.5px">Nenhum usuário cadastrado ainda.</span>')+
         '</div>'+
         '<div class="pm-actions">'+
@@ -195,14 +210,18 @@ async function abrirGerenciarAcesso(productId){
   overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
   overlay.querySelector('#pm-cancel').onclick = function(){ overlay.remove(); };
   overlay.querySelector('#pm-save').onclick = async function(){
-    var poId = overlay.querySelector('#pm-po').value || null;
     var bu = overlay.querySelector('#pm-bu').value.trim() || null;
-    var selecionados = Array.prototype.slice.call(overlay.querySelectorAll('.pm-check input:checked')).map(function(i){ return i.value; });
-    var { error: err1 } = await supabaseClient.from('products').update({po_user_id: poId, bu: bu}).eq('id', productId);
+    var novosAcessos = Array.prototype.slice.call(overlay.querySelectorAll('.pm-access-sel'))
+      .map(function(s){ return { uid: s.getAttribute('data-uid'), nivel: s.value }; })
+      .filter(function(a){ return a.nivel; });
+
+    var { error: err1 } = await supabaseClient.from('products').update({bu: bu}).eq('id', productId);
     var { error: err2 } = await supabaseClient.from('product_stakeholders').delete().eq('product_id', productId);
     var err3 = null;
-    if(selecionados.length){
-      var res3 = await supabaseClient.from('product_stakeholders').insert(selecionados.map(function(uid){ return {product_id:productId, user_id:uid}; }));
+    if(novosAcessos.length){
+      var res3 = await supabaseClient.from('product_stakeholders').insert(novosAcessos.map(function(a){
+        return { product_id: productId, user_id: a.uid, pode_editar: a.nivel==='edit' };
+      }));
       err3 = res3.error;
     }
     if(err1||err2||err3){ alert('Erro ao salvar acesso: '+((err1||err2||err3).message)); return; }

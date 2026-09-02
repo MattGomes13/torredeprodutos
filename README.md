@@ -251,16 +251,22 @@ create table products (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null,
   name text not null,
-  po_user_id uuid references auth.users,       -- o PO responsável por este produto
   config jsonb not null default '{}'::jsonb,    -- tipos/layers/tema/logo do roadmap
   bu text,                                      -- área de negócio, pro comparativo por BU no Hub
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- todo usuário associado a um produto (PO ou stakeholder) passa por aqui.
+-- pode_editar decide o nível dessa associação: true = edita o roadmap
+-- inteiro (épicos, layers, cores), false = só visualiza. Um mesmo usuário
+-- pode estar associado a vários produtos, e um mesmo produto pode ter
+-- vários editores ao mesmo tempo — não existe "o PO único" de um produto,
+-- cada associação produto×usuário define seu próprio nível.
 create table product_stakeholders (
   product_id uuid references products(id) on delete cascade,
   user_id uuid references auth.users on delete cascade,
+  pode_editar boolean not null default false,
   primary key (product_id, user_id)
 );
 
@@ -276,13 +282,30 @@ create table epics (
 -- (a função list_users() já foi criada lá no script 5.1 — reaproveitada aqui
 -- pra escolher PO/stakeholders por e-mail na tela "Gerenciar acesso")
 
+-- funções auxiliares "security definer": rodam ignorando RLS, e existem
+-- só pra quebrar a referência circular entre as policies de products e
+-- product_stakeholders (uma pergunta pra outra, que pergunta de volta —
+-- sem essas funções, o Postgres entra em recursão infinita).
+create or replace function is_product_editor(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(
+    select 1 from product_stakeholders
+    where product_id = p_product_id and user_id = auth.uid() and pode_editar = true
+  );
+$$;
+
+create or replace function is_product_member(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(select 1 from product_stakeholders where product_id = p_product_id and user_id = auth.uid());
+$$;
+
 -- substitui de uma vez todos os épicos de um produto (usado ao salvar/importar
 -- o roadmap) — evita fazer isso em 2 chamadas separadas (delete + insert) do
 -- lado do navegador, o que deixaria uma janela de inconsistência.
 create or replace function replace_epics(p_product_id uuid, p_items jsonb)
 returns void language plpgsql as $$
 begin
-  if not (can_manage() or exists(select 1 from products p where p.id=p_product_id and p.po_user_id=auth.uid())) then
+  if not (can_manage() or is_product_editor(p_product_id)) then
     raise exception 'sem permissão para editar este produto';
   end if;
   delete from epics where product_id = p_product_id;
@@ -293,20 +316,6 @@ end;
 $$;
 grant execute on function replace_epics(uuid, jsonb) to authenticated;
 
--- funções auxiliares "security definer": rodam ignorando RLS, e existem
--- só pra quebrar a referência circular entre as policies de products e
--- product_stakeholders (uma pergunta pra outra, que pergunta de volta —
--- sem essas funções, o Postgres entra em recursão infinita).
-create or replace function is_product_po(p_product_id uuid)
-returns boolean language sql stable security definer as $$
-  select exists(select 1 from products where id = p_product_id and po_user_id = auth.uid());
-$$;
-
-create or replace function is_product_stakeholder(p_product_id uuid)
-returns boolean language sql stable security definer as $$
-  select exists(select 1 from product_stakeholders where product_id = p_product_id and user_id = auth.uid());
-$$;
-
 alter table products enable row level security;
 alter table product_stakeholders enable row level security;
 alter table epics enable row level security;
@@ -315,31 +324,30 @@ create policy "ver produtos permitidos"
 on products for select
 using (
   can_manage()
-  or po_user_id = auth.uid()
-  or is_product_stakeholder(id)
+  or is_product_member(id)
 );
 
 create policy "admin/manager cria produtos"
 on products for insert
 with check ( can_manage() );
 
-create policy "admin/manager ou po atualizam produto"
+create policy "admin/manager ou editor do produto atualizam produto"
 on products for update
-using ( can_manage() or po_user_id = auth.uid() );
+using ( can_manage() or is_product_editor(id) );
 
 create policy "admin/manager exclui produtos"
 on products for delete
 using ( can_manage() );
 
-create policy "ver atribuições de stakeholder"
+create policy "ver atribuições de acesso"
 on product_stakeholders for select
 using (
   can_manage()
   or user_id = auth.uid()
-  or is_product_po(product_id)
+  or is_product_editor(product_id)
 );
 
-create policy "admin/manager gerencia atribuições de stakeholder"
+create policy "admin/manager gerencia atribuições de acesso"
 on product_stakeholders for all
 using ( can_manage() )
 with check ( can_manage() );
@@ -348,10 +356,10 @@ create policy "ver épicos de produtos permitidos"
 on epics for select
 using ( exists (select 1 from products p where p.id = epics.product_id) );
 
-create policy "admin/manager ou po do produto gerenciam épicos"
+create policy "admin/manager ou editor do produto gerenciam épicos"
 on epics for all
-using ( can_manage() or is_product_po(product_id) )
-with check ( can_manage() or is_product_po(product_id) );
+using ( can_manage() or is_product_editor(product_id) )
+with check ( can_manage() or is_product_editor(product_id) );
 ```
 
 6. Com os 3 scripts acima já rodados, abra `setup-admin.html` no navegador e crie o **primeiro administrador** por lá (usuário + senha direto na tela) — ela só funciona antes de existir qualquer admin no portal.
@@ -367,7 +375,91 @@ with check ( can_manage() or is_product_po(product_id) );
 
 7. Depois disso, como admin (ou manager, pra PO/Stakeholder), use:
    - **Administração** (card no dashboard, visível pra admin e manager) → criar novos usuários de qualquer perfil que você tenha permissão de criar (usuário + senha direto).
-   - **Produtos** → criar produtos e decidir quem é o PO de cada um / quem pode visualizar como stakeholder.
+   - **Produtos** → criar produtos e, em "Gerenciar acesso", associar cada usuário (PO ou stakeholder) com o nível de acesso desejado — **editar e visualizar** ou **só visualizar**. Um mesmo usuário pode ser associado a vários produtos, e um mesmo produto pode ter mais de um editor.
+
+## Migração: multi-PO com nível editar/visualizar
+
+Se o seu banco já foi criado **antes** dessa mudança (schema antigo com
+`products.po_user_id` + `product_stakeholders` só de visualização), rode
+isso **uma vez** no SQL Editor do Supabase pra migrar pro modelo novo, sem
+perder nada do que já estava configurado:
+
+```sql
+-- 1) nível de acesso por associação produto × usuário
+alter table product_stakeholders
+  add column if not exists pode_editar boolean not null default false;
+
+-- 2) migra os POs atuais (products.po_user_id) pra virarem editores
+insert into product_stakeholders (product_id, user_id, pode_editar)
+select id, po_user_id, true from products
+where po_user_id is not null
+on conflict (product_id, user_id) do update set pode_editar = true;
+
+-- 3) funções novas (substituem is_product_po/is_product_stakeholder)
+create or replace function is_product_editor(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(
+    select 1 from product_stakeholders
+    where product_id = p_product_id and user_id = auth.uid() and pode_editar = true
+  );
+$$;
+
+create or replace function is_product_member(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(select 1 from product_stakeholders where product_id = p_product_id and user_id = auth.uid());
+$$;
+
+-- 4) replace_epics() passa a usar a nova checagem
+create or replace function replace_epics(p_product_id uuid, p_items jsonb)
+returns void language plpgsql as $$
+begin
+  if not (can_manage() or is_product_editor(p_product_id)) then
+    raise exception 'sem permissão para editar este produto';
+  end if;
+  delete from epics where product_id = p_product_id;
+  insert into epics (product_id, epic_id, item)
+  select p_product_id, (elem->>'id'), elem
+  from jsonb_array_elements(p_items) as elem;
+end;
+$$;
+
+-- 5) troca as policies que dependiam de po_user_id/is_product_po
+drop policy if exists "ver produtos permitidos" on products;
+create policy "ver produtos permitidos"
+on products for select
+using ( can_manage() or is_product_member(id) );
+
+drop policy if exists "admin/manager ou po atualizam produto" on products;
+create policy "admin/manager ou editor do produto atualizam produto"
+on products for update
+using ( can_manage() or is_product_editor(id) );
+
+drop policy if exists "ver atribuições de stakeholder" on product_stakeholders;
+create policy "ver atribuições de acesso"
+on product_stakeholders for select
+using ( can_manage() or user_id = auth.uid() or is_product_editor(product_id) );
+
+drop policy if exists "admin/manager gerencia atribuições de stakeholder" on product_stakeholders;
+create policy "admin/manager gerencia atribuições de acesso"
+on product_stakeholders for all
+using ( can_manage() )
+with check ( can_manage() );
+
+drop policy if exists "admin/manager ou po do produto gerenciam épicos" on epics;
+create policy "admin/manager ou editor do produto gerenciam épicos"
+on epics for all
+using ( can_manage() or is_product_editor(product_id) )
+with check ( can_manage() or is_product_editor(product_id) );
+
+-- 6) as funções antigas não são mais usadas em nenhuma policy — pode remover
+drop function if exists is_product_po(uuid);
+drop function if exists is_product_stakeholder(uuid);
+```
+
+A coluna `products.po_user_id` pode continuar existindo no banco (não é
+mais lida por nenhuma tela) — não precisa apagá-la, mas também não tem
+problema rodar `alter table products drop column po_user_id;` depois de
+confirmar que a migração dos dados no passo 2 funcionou.
 
 ## Rodando localmente
 

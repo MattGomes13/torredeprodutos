@@ -4255,7 +4255,15 @@ return;
 }
 CURRENT_PRODUCT=product;
 var isAdminOuManager=ctx.perfil&&(ctx.perfil.role==='admin'||ctx.perfil.role==='manager');
-ACCESS_LEVEL=isAdminOuManager?'admin':(product.po_user_id===ctx.user.id?'po':'view');
+if(isAdminOuManager){
+ACCESS_LEVEL='admin';
+}else{
+// nível de acesso (editar ou só visualizar) vem de product_stakeholders —
+// um mesmo usuário pode ter edição em vários produtos ao mesmo tempo, e
+// vários usuários podem editar o mesmo produto (não existe mais "o PO único").
+var {data:meuAcesso}=await supabaseClient.from('product_stakeholders').select('pode_editar').eq('product_id',productId).eq('user_id',ctx.user.id).maybeSingle();
+ACCESS_LEVEL=(meuAcesso&&meuAcesso.pode_editar)?'po':'view';
+}
 if(ACCESS_LEVEL==='view')document.body.classList.add('view-only');
 
 var {data:epicRows}=await supabaseClient.from('epics').select('item').eq('product_id',productId);

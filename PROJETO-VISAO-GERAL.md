@@ -101,14 +101,18 @@ portal-sistemas/
 | **PO** | ❌ | ✅ só o(s) produto(s) dele | ✅ | ❌ |
 | **Stakeholder** | ❌ | ❌ (só visualiza) | ❌ (sem acesso) | ❌ |
 
-- Um usuário **PO pode estar associado a mais de um produto**. Isso é
-  editado de dois jeitos equivalentes (mexem no mesmo campo
-  `products.po_user_id`): em **Produtos → Gerenciar acesso** (por
-  produto: escolhe o PO daquele produto) ou em **Administração de
-  usuários** (por usuário: um botão "Produtos" abre um checklist de todos
-  os produtos, marca/desmarca quais ele é responsável).
+- Um usuário **pode estar associado a vários produtos ao mesmo tempo**, e
+  um mesmo produto **pode ter mais de um editor** — o nível de acesso
+  (editar+visualizar ou só visualizar) é definido por associação
+  produto×usuário, na tabela `product_stakeholders` (coluna
+  `pode_editar`). Não existe mais "o PO único" de um produto. Isso é
+  editado de dois jeitos equivalentes (mexem na mesma tabela): em
+  **Produtos → Gerenciar acesso** (por produto: escolhe, pra cada
+  usuário, "sem acesso" / "só visualizar" / "editar e visualizar") ou em
+  **Administração de usuários** (por usuário: um botão "Produtos" abre a
+  mesma escolha, produto a produto).
 - Criar um usuário como **PO exige marcar pelo menos 1 produto** na hora
-  da criação.
+  da criação (esses produtos são criados já com `pode_editar = true`).
 - **Não existe "excluir conta"** de verdade (exigiria a `service_role`
   key). **Desativar** tem o mesmo efeito prático: a pessoa é deslogada na
   hora (checado em `initTopbar()`, chamado no topo de toda página
@@ -147,7 +151,8 @@ usuários (via RPC `list_users()`), com perfil, status (ativo/inativo) e
 Por linha, permite: trocar o perfil (RPC `set_user_role`),
 ativar/desativar (RPC `set_user_ativo`), redefinir senha (chama a Edge
 Function `admin-reset-password`) e — só pra quem é PO — abrir um modal
-"Produtos" pra editar a lista de produtos associados. Também tem o
+"Produtos" pra escolher, produto a produto, o nível de acesso dele
+(sem acesso / só visualizar / editar e visualizar). Também tem o
 formulário de criar novo usuário (usuário + senha diretos; se o perfil
 escolhido for PO, exige marcar produtos). Toda a lógica de "quem pode
 mexer em quem" é replicada no front (esconder controles) e no banco
@@ -166,9 +171,11 @@ Hub se o usuário for `stakeholder`.
 ### `modules/torre-de-produtos/produtos.html`
 Mostra os produtos que o usuário pode acessar (a query já vem filtrada
 pelo RLS — não precisa filtrar no front). Admin/Manager veem todos, têm
-botão "+ Novo produto" e "Gerenciar acesso" (escolher PO + stakeholders
-de cada produto, via modal com checklist) e "Excluir". PO/Stakeholder
-veem só os produtos liberados pra eles, com uma tag indicando o papel.
+botão "+ Novo produto" e "Gerenciar acesso" (por produto, escolhe pra
+cada usuário um nível — sem acesso / só visualizar / editar e
+visualizar — via modal com um `<select>` por linha) e "Excluir".
+PO/Stakeholder veem só os produtos liberados pra eles, com uma tag
+indicando se podem editar ou só visualizar.
 
 ### `modules/torre-de-produtos/roadmap.html?product=<id>`
 O roadmap completo de **um** produto: KPIs, Gantt, visão
@@ -180,8 +187,9 @@ praticamente inalterada de um sistema que já existia rodando localmente
 — só a persistência mudou de `localStorage` pro Supabase).
 
 - **Nível de acesso** (`ACCESS_LEVEL`): `admin` (admin ou manager,
-  edição total), `po` (é o `po_user_id` deste produto, edição total),
-  `view` (qualquer outro caso, só leitura — botões de
+  edição total), `po` (tem `pode_editar = true` em `product_stakeholders`
+  pra este produto — pode ser mais de um usuário ao mesmo tempo, edição
+  total), `view` (qualquer outro caso, só leitura — botões de
   criar/editar/excluir/importar ficam ocultos via CSS `.view-only`, e o
   Supabase bloqueia essas ações no banco de qualquer forma).
 - **Botão "⬆ Importar"**: sobe um `.html` de roadmap **já exportado** de
@@ -400,15 +408,22 @@ create table products (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null,
   name text not null,
-  po_user_id uuid references auth.users,       -- o PO responsável por este produto
   config jsonb not null default '{}'::jsonb,    -- tipos/layers/tema/logo do roadmap
+  bu text,                                      -- área de negócio, pro comparativo por BU no Hub
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- todo usuário associado a um produto (PO ou stakeholder) passa por aqui.
+-- pode_editar decide o nível dessa associação: true = edita o roadmap
+-- inteiro (épicos, layers, cores), false = só visualiza. Um mesmo usuário
+-- pode estar associado a vários produtos, e um mesmo produto pode ter
+-- vários editores ao mesmo tempo — não existe "o PO único" de um produto,
+-- cada associação produto×usuário define seu próprio nível.
 create table product_stakeholders (
   product_id uuid references products(id) on delete cascade,
   user_id uuid references auth.users on delete cascade,
+  pode_editar boolean not null default false,
   primary key (product_id, user_id)
 );
 
@@ -421,13 +436,30 @@ create table epics (
   updated_at timestamptz not null default now()
 );
 
+-- funções auxiliares "security definer": rodam ignorando RLS, e existem
+-- só pra quebrar a referência circular entre as policies de products e
+-- product_stakeholders (uma pergunta pra outra, que pergunta de volta —
+-- sem essas funções, o Postgres entra em recursão infinita).
+create or replace function is_product_editor(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(
+    select 1 from product_stakeholders
+    where product_id = p_product_id and user_id = auth.uid() and pode_editar = true
+  );
+$$;
+
+create or replace function is_product_member(p_product_id uuid)
+returns boolean language sql stable security definer as $$
+  select exists(select 1 from product_stakeholders where product_id = p_product_id and user_id = auth.uid());
+$$;
+
 -- substitui de uma vez todos os épicos de um produto (usado ao salvar/importar
 -- o roadmap) — evita fazer isso em 2 chamadas separadas (delete + insert) do
 -- lado do navegador, o que deixaria uma janela de inconsistência.
 create or replace function replace_epics(p_product_id uuid, p_items jsonb)
 returns void language plpgsql as $$
 begin
-  if not (can_manage() or exists(select 1 from products p where p.id=p_product_id and p.po_user_id=auth.uid())) then
+  if not (can_manage() or is_product_editor(p_product_id)) then
     raise exception 'sem permissão para editar este produto';
   end if;
   delete from epics where product_id = p_product_id;
@@ -438,20 +470,6 @@ end;
 $$;
 grant execute on function replace_epics(uuid, jsonb) to authenticated;
 
--- funções auxiliares "security definer": rodam ignorando RLS, e existem
--- só pra quebrar a referência circular entre as policies de products e
--- product_stakeholders (uma pergunta pra outra, que pergunta de volta —
--- sem essas funções, o Postgres entra em recursão infinita).
-create or replace function is_product_po(p_product_id uuid)
-returns boolean language sql stable security definer as $$
-  select exists(select 1 from products where id = p_product_id and po_user_id = auth.uid());
-$$;
-
-create or replace function is_product_stakeholder(p_product_id uuid)
-returns boolean language sql stable security definer as $$
-  select exists(select 1 from product_stakeholders where product_id = p_product_id and user_id = auth.uid());
-$$;
-
 alter table products enable row level security;
 alter table product_stakeholders enable row level security;
 alter table epics enable row level security;
@@ -460,31 +478,30 @@ create policy "ver produtos permitidos"
 on products for select
 using (
   can_manage()
-  or po_user_id = auth.uid()
-  or is_product_stakeholder(id)
+  or is_product_member(id)
 );
 
 create policy "admin/manager cria produtos"
 on products for insert
 with check ( can_manage() );
 
-create policy "admin/manager ou po atualizam produto"
+create policy "admin/manager ou editor do produto atualizam produto"
 on products for update
-using ( can_manage() or po_user_id = auth.uid() );
+using ( can_manage() or is_product_editor(id) );
 
 create policy "admin/manager exclui produtos"
 on products for delete
 using ( can_manage() );
 
-create policy "ver atribuições de stakeholder"
+create policy "ver atribuições de acesso"
 on product_stakeholders for select
 using (
   can_manage()
   or user_id = auth.uid()
-  or is_product_po(product_id)
+  or is_product_editor(product_id)
 );
 
-create policy "admin/manager gerencia atribuições de stakeholder"
+create policy "admin/manager gerencia atribuições de acesso"
 on product_stakeholders for all
 using ( can_manage() )
 with check ( can_manage() );
@@ -493,10 +510,10 @@ create policy "ver épicos de produtos permitidos"
 on epics for select
 using ( exists (select 1 from products p where p.id = epics.product_id) );
 
-create policy "admin/manager ou po do produto gerenciam épicos"
+create policy "admin/manager ou editor do produto gerenciam épicos"
 on epics for all
-using ( can_manage() or is_product_po(product_id) )
-with check ( can_manage() or is_product_po(product_id) );
+using ( can_manage() or is_product_editor(product_id) )
+with check ( can_manage() or is_product_editor(product_id) );
 ```
 
 > A tabela `hubs` (de uma versão antiga, baseada em upload manual) **não

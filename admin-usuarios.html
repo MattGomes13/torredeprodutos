@@ -153,7 +153,7 @@ function podeEditarUsuario(roleAtual, souEu){
 
 async function getProdutos(forceRefresh){
   if(PRODUTOS_CACHE && !forceRefresh) return PRODUTOS_CACHE;
-  var { data } = await supabaseClient.from('products').select('id,name,po_user_id').order('name');
+  var { data } = await supabaseClient.from('products').select('id,name').order('name');
   PRODUTOS_CACHE = data || [];
   return PRODUTOS_CACHE;
 }
@@ -173,10 +173,11 @@ async function onRoleChangeCriacao(){
   if(role === 'po'){
     wrap.classList.remove('hide');
     var produtos = await getProdutos();
+    // Um PO pode ter edição em quantos produtos precisar — não substitui
+    // outros POs que já tenham edição no mesmo produto.
     document.getElementById('na-produtos-list').innerHTML = produtos.length
       ? produtos.map(function(p){
-          return '<label class="chk-item"><input type="checkbox" value="'+p.id+'"> '+escapeHtml(p.name)+
-            (p.po_user_id ? ' <span class="chk-note">(já tem PO — vai ser substituído)</span>' : '')+'</label>';
+          return '<label class="chk-item"><input type="checkbox" value="'+p.id+'"> '+escapeHtml(p.name)+'</label>';
         }).join('')
       : '<span style="color:var(--dim);font-size:11.5px">Nenhum produto cadastrado ainda — crie um em Produtos primeiro.</span>';
   } else {
@@ -264,18 +265,30 @@ async function redefinirSenha(id, email){
 
 async function abrirProdutosDoPo(userId, userEmail){
   var produtos = await getProdutos(true);
+  var { data: acessoRows } = await supabaseClient.from('product_stakeholders').select('product_id,pode_editar').eq('user_id', userId);
+  var acessoMap = {};
+  (acessoRows||[]).forEach(function(r){ acessoMap[r.product_id] = r.pode_editar ? 'edit' : 'view'; });
+
+  // Um PO pode ter acesso a vários produtos ao mesmo tempo, e o nível
+  // (editar ou só visualizar) é escolhido produto a produto — sem
+  // exclusividade: outros usuários podem continuar editando o mesmo produto.
   var overlay = document.createElement('div');
   overlay.className = 'pm-overlay';
   overlay.innerHTML =
     '<div class="pm-modal">'+
       '<div class="pm-modal-hdr"><h3>Produtos de '+escapeHtml(userEmail)+'</h3></div>'+
       '<div class="pm-modal-body">'+
-        '<div class="pm-checklist">'+
+        '<div class="pm-checklist" style="max-height:260px">'+
           (produtos.length ? produtos.map(function(p){
-            var marcado = p.po_user_id === userId;
-            var outroPO = p.po_user_id && p.po_user_id !== userId;
-            return '<label class="pm-check"><input type="checkbox" value="'+p.id+'" '+(marcado?'checked':'')+'> '+escapeHtml(p.name)+
-              (outroPO ? ' <span class="chk-note">(tem outro PO — vai ser substituído)</span>' : '')+'</label>';
+            var nivel = acessoMap[p.id] || '';
+            return '<div class="pm-access-row" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0">'+
+              '<span style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(p.name)+'</span>'+
+              '<select class="pm-access-sel" data-pid="'+p.id+'" style="flex:0 0 auto;width:172px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:11.5px;font-family:inherit">'+
+                '<option value="" '+(nivel===''?'selected':'')+'>Sem acesso</option>'+
+                '<option value="view" '+(nivel==='view'?'selected':'')+'>Só visualizar</option>'+
+                '<option value="edit" '+(nivel==='edit'?'selected':'')+'>Editar e visualizar</option>'+
+              '</select>'+
+            '</div>';
           }).join('') : '<span style="color:var(--dim);font-size:11.5px">Nenhum produto cadastrado ainda.</span>')+
         '</div>'+
         '<div class="pm-actions">'+
@@ -288,22 +301,20 @@ async function abrirProdutosDoPo(userId, userEmail){
   overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
   overlay.querySelector('#pm-cancel').onclick = function(){ overlay.remove(); };
   overlay.querySelector('#pm-save').onclick = async function(){
-    var marcados = Array.prototype.slice.call(overlay.querySelectorAll('.pm-check input:checked')).map(function(i){ return i.value; });
-    if(marcados.length === 0 && !confirm('Nenhum produto marcado — esse PO vai ficar sem nenhum produto associado. Continuar?')) return;
-    var erros = [];
-    for(var i=0;i<produtos.length;i++){
-      var p = produtos[i];
-      var deveSerPO = marcados.indexOf(p.id) > -1;
-      var eraPO = p.po_user_id === userId;
-      if(deveSerPO && !eraPO){
-        var r1 = await supabaseClient.from('products').update({po_user_id:userId}).eq('id', p.id);
-        if(r1.error) erros.push(p.name+': '+r1.error.message);
-      } else if(!deveSerPO && eraPO){
-        var r2 = await supabaseClient.from('products').update({po_user_id:null}).eq('id', p.id);
-        if(r2.error) erros.push(p.name+': '+r2.error.message);
-      }
+    var novosAcessos = Array.prototype.slice.call(overlay.querySelectorAll('.pm-access-sel'))
+      .map(function(s){ return { pid: s.getAttribute('data-pid'), nivel: s.value }; })
+      .filter(function(a){ return a.nivel; });
+    if(novosAcessos.length === 0 && !confirm('Nenhum produto marcado — esse PO vai ficar sem nenhum produto associado. Continuar?')) return;
+
+    var { error: err1 } = await supabaseClient.from('product_stakeholders').delete().eq('user_id', userId).in('product_id', produtos.map(function(p){ return p.id; }));
+    var err2 = null;
+    if(novosAcessos.length){
+      var res2 = await supabaseClient.from('product_stakeholders').insert(novosAcessos.map(function(a){
+        return { product_id: a.pid, user_id: userId, pode_editar: a.nivel==='edit' };
+      }));
+      err2 = res2.error;
     }
-    if(erros.length) alert('Alguns produtos não puderam ser atualizados:\n'+erros.join('\n'));
+    if(err1||err2) alert('Erro ao salvar acesso: '+((err1||err2).message));
     PRODUTOS_CACHE = null;
     overlay.remove();
     await carregarUsuarios();
@@ -365,10 +376,9 @@ document.getElementById('novoUsuarioForm').addEventListener('submit', async func
     if(roleError) throw roleError;
 
     if(role === 'po'){
-      for(var i=0;i<produtosSelecionados.length;i++){
-        var r = await supabaseClient.from('products').update({po_user_id: signUpData.user.id}).eq('id', produtosSelecionados[i]);
-        if(r.error) throw r.error;
-      }
+      var acessos = produtosSelecionados.map(function(pid){ return { product_id: pid, user_id: signUpData.user.id, pode_editar: true }; });
+      var { error: acessoError } = await supabaseClient.from('product_stakeholders').insert(acessos);
+      if(acessoError) throw acessoError;
     }
 
     document.getElementById('novoUsuarioForm').reset();

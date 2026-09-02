@@ -363,7 +363,8 @@ async function atualizarDados(mostrarToast){
     });
   }
 
-  // Resolve o e-mail do PO de cada produto — só funciona pra quem pode
+  // Resolve o(s) e-mail(s) de quem edita cada produto — um produto pode
+  // ter mais de um editor (vários POs) agora. Só funciona pra quem pode
   // chamar list_users() (admin/manager); se um PO abrir o Hub, essa
   // chamada falha silenciosamente e o nome do PO simplesmente não aparece.
   var usersMap = {};
@@ -371,6 +372,15 @@ async function atualizarDados(mostrarToast){
     var { data: users } = await supabaseClient.rpc('list_users');
     (users||[]).forEach(function(u){ usersMap[u.id] = u.email; });
   }catch(e){ /* sem permissão de listar usuários — sem problema */ }
+
+  var editorsByProduct = {};
+  if(ids.length){
+    var { data: accessRows } = await supabaseClient.from('product_stakeholders').select('product_id,user_id').eq('pode_editar', true).in('product_id', ids);
+    (accessRows||[]).forEach(function(r){
+      if(!editorsByProduct[r.product_id]) editorsByProduct[r.product_id] = [];
+      editorsByProduct[r.product_id].push(usersMap[r.user_id] || 'PO definido');
+    });
+  }
 
   var novoProducts = {};
   var novaOrdem = [];
@@ -385,7 +395,7 @@ async function atualizarDados(mostrarToast){
       types: {},
       visible: PRODUCTS[key] ? PRODUCTS[key].visible : true,
       bu: p.bu || '',
-      poName: p.po_user_id ? (usersMap[p.po_user_id] || 'PO definido') : '',
+      poName: (editorsByProduct[p.id] || []).join(', '),
       productId: p.id
     };
     novaOrdem.push(key);
