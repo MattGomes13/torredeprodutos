@@ -1852,6 +1852,12 @@ var kpis=[
 if(totalValor>0){
 kpis.push({l:"Receita Potencial",v:"R$"+fmtBRL(totalValor),s:"valor mapeado",cls:"g"});
 }
+// Valor mapeado nos épicos isolados no Backlog — não entra na Receita
+// Potencial (que só considera o que está fora do Backlog).
+var backlogValor=getBacklogItems().reduce(function(s,i){return s+(i.valor||0);},0);
+if(backlogValor>0){
+kpis.push({l:"Receita em Backlog",v:"R$"+fmtBRL(backlogValor),s:"aguardando priorização",cls:"p"});
+}
 document.getElementById("kpis").innerHTML=kpis.map(function(k){
 return'<div class="kpi '+k.cls+'"><div class="kpi-l">'+k.l+'</div><div class="kpi-v">'+k.v+'</div><div class="kpi-s">'+k.s+'</div></div>';
 }).join("");
@@ -3260,7 +3266,7 @@ showToast("Detalhes salvos para '"+tipo+"'!","ok");
 // do comentário original para referência de leitura do arquivo)
 // ── STRATEGIC DASHBOARD (Visão Financeira & Crescimento) ──────────────────
 var STRAT_ACTIVE_LAYER=null;
-var STRAT_EXPANDED_CARD=null; // null | 'setup' | 'ret' | 'sem'
+var STRAT_EXPANDED_CARD=null; // null | 'setup' | 'ret' | 'sem' | 'backlog'
 function toggleFinCard(type){
 STRAT_EXPANDED_CARD=STRAT_EXPANDED_CARD===type?null:type;
 buildStratDashboard();
@@ -3286,6 +3292,11 @@ function buildStratDashboard(){
 var vis=applyFilters(), total=vis.length;
 var done=0,wip=0,blk=0,atras=0,bkl=0;
 var totalValor=0,totalRet=0,totalSetup=0,totalSemTipo=0,valorCt=0;
+// Receita em Backlog: valor mapeado nos épicos isolados (Em backlog/
+// Impedimento) — fora da conta de Receita Potencial acima, que só olha
+// pro que está fora do Backlog (vis).
+var backlogValorItems=getBacklogItems().filter(function(i){return(i.valor||0)>0;});
+var totalBacklogValor=backlogValorItems.reduce(function(s,i){return s+(i.valor||0);},0);
 vis.forEach(function(i){
 if(i.status==="Finalizado")done++;
 if(i.status==="Em andamento")wip++;
@@ -3467,9 +3478,42 @@ miniStatusBar(items)+
 '</div>'+
 '</div>';
 }
-h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:10px">';
+// Card de Receita em Backlog: mesma pegada visual dos outros 2, mas com
+// a quebra por raia do Kanban de Backlog em vez de status (aqui todos os
+// itens compartilham status Em backlog/Impedimento, então essa quebra
+// diz mais sobre onde o valor está no funil de refinamento).
+function buildBacklogRevenueCard(total,items){
+var isActive=STRAT_EXPANDED_CARD==='backlog';
+var byLane={};
+BACKLOG_LANES.forEach(function(l){byLane[l.id]=0;});
+items.forEach(function(i){var l=itemBacklogLane(i);byLane[l]=(byLane[l]||0)+1;});
+return'<div style="background:#fff;border:2px solid '+(isActive?'#7c3aed':'#ddd6fe')+';border-radius:16px;overflow:hidden;box-shadow:'+(isActive?'0 6px 28px rgba(0,0,0,.14)':'0 4px 16px rgba(0,0,0,.06)')+';cursor:pointer;transition:box-shadow .2s,border-color .2s" onclick="toggleFinCard(\'backlog\')">'+
+'<div style="background:linear-gradient(135deg,#6d28d9,#a78bfa);padding:14px 18px 12px">'+
+'<div style="display:flex;align-items:center;justify-content:space-between">'+
+'<div>'+
+'<div style="font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.65);margin-bottom:2px">💤 Receita em Backlog</div>'+
+'<div style="font-size:10px;color:rgba(255,255,255,.7)">Valor mapeado em épicos ainda não priorizados</div>'+
+'</div>'+
+'<span style="font-size:16px;transition:transform .2s;'+(isActive?'transform:rotate(180deg)':'')+'">'+(isActive?'▲':'▼')+'</span>'+
+'</div>'+
+'</div>'+
+'<div style="padding:16px 18px 0">'+
+'<div style="font-size:8.5px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Valor Total Mapeado</div>'+
+'<div style="font-size:34px;font-weight:900;font-family:Courier New,monospace;color:'+(total>0?'#6d28d9':'#d1d5db')+';letter-spacing:-1px;line-height:1.1">'+fmtR(total)+'</div>'+
+'<div style="font-size:8.5px;color:#9ca3af;margin-top:3px">'+items.length+' épico'+(items.length!==1?'s':'')+' · clique para '+(isActive?'fechar':'ver lista')+'</div>'+
+'</div>'+
+'<div style="height:1px;background:#ede9fe;margin:12px 18px 0"></div>'+
+'<div style="padding:10px 18px 14px;display:flex;flex-wrap:wrap;gap:5px">'+
+BACKLOG_LANES.map(function(l){
+return'<span style="font-size:7.5px;font-weight:700;padding:3px 8px;border-radius:20px;background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;white-space:nowrap">'+l.label+': '+(byLane[l.id]||0)+'</span>';
+}).join("")+
+'</div>'+
+'</div>';
+}
+h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:10px">';
 h+=buildCard('setup','🔧 Setup / Desenvolvimento','Receita de implantação & ativação',totalSetup,setupItemsV,setupDone,setupPct,'#bfdbfe','#1e3a8a','#2563eb','#e0e7ff','#2563eb');
 h+=buildCard('ret','💰 Recorrente / Retenção','Expansão de receita & retenção de clientes',totalRet,retItemsV,retDone,retPct,'#a7f3d0','#064e3b','#059669','#d1fae5','#059669');
+h+=buildBacklogRevenueCard(totalBacklogValor,backlogValorItems);
 h+='</div>';
 // ── RECONCILIATION ROW: por que Setup+Recorrente ≠ Receita Potencial ──
 if(totalValor>0){
@@ -3509,11 +3553,14 @@ panelLabel='🔧 Setup / Desenvolvimento';panelColor='#1e3a8a';panelBg='#eff6ff'
 } else if(STRAT_EXPANDED_CARD==='ret'){
 panelItems=allValorItems.filter(function(i){return i.tipoValor==="Retenção";});
 panelLabel='💰 Recorrente / Retenção';panelColor='#064e3b';panelBg='#f0fdf4';panelTotal=totalRet;
+} else if(STRAT_EXPANDED_CARD==='backlog'){
+panelItems=backlogValorItems;
+panelLabel='💤 Receita em Backlog';panelColor='#6d28d9';panelBg='#f5f3ff';panelTotal=totalBacklogValor;
 } else {
 panelItems=semTipoItemsV;
 panelLabel='⚠ Sem tipo definido';panelColor='#92400e';panelBg='#fffbeb';panelTotal=totalSemTipo;
 }
-h+='<div id="fin-expand-panel" style="background:#fff;border:2px solid '+(STRAT_EXPANDED_CARD==='setup'?'#bfdbfe':STRAT_EXPANDED_CARD==='ret'?'#a7f3d0':'#fde68a')+';border-radius:14px;overflow:hidden;margin-bottom:18px;box-shadow:0 4px 20px rgba(0,0,0,.08)">'+
+h+='<div id="fin-expand-panel" style="background:#fff;border:2px solid '+(STRAT_EXPANDED_CARD==='setup'?'#bfdbfe':STRAT_EXPANDED_CARD==='ret'?'#a7f3d0':STRAT_EXPANDED_CARD==='backlog'?'#ddd6fe':'#fde68a')+';border-radius:14px;overflow:hidden;margin-bottom:18px;box-shadow:0 4px 20px rgba(0,0,0,.08)">'+
 '<div style="padding:11px 16px;background:'+panelBg+';border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'+
 '<div style="font-size:10.5px;font-weight:800;color:'+panelColor+'">'+panelLabel+' — Épicos</div>'+
 '<div style="display:flex;align-items:center;gap:12px">'+
