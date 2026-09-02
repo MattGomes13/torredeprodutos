@@ -226,8 +226,13 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
   .totals{grid-template-columns:repeat(2,1fr)}
   h1{font-size:22px}
 }
+@page{ size:landscape; margin:12mm; }
 @media print{
-  .topbar-actions,.rail,.tabs,.tbl-wrap,.setup-cfg,footer{display:none!important}
+  /* A tabela de épicos (.tbl-wrap) ficava escondida antes — era o maior
+     bloco de conteúdo, então sobrava pouca coisa e tudo cabia numa
+     página só. Agora ela entra na impressão e paginação normal do
+     navegador cuida do resto. */
+  .topbar-actions,.rail,.tabs,.setup-cfg,footer{display:none!important}
   body{background:#fff}
   .shell{padding:0 12px}
   .panel,.tot,.wcard,.bu-leader-card{box-shadow:none!important;border:1px solid #ccc!important}
@@ -237,6 +242,13 @@ footer{text-align:center;padding:30px 0 10px;font-size:10px;color:var(--dim);fon
   .sec-body{display:block!important}
   .sec-toggle-ic{display:none}
   .sec-hdr-toggle{cursor:default}
+  /* A tabela usa overflow-x:auto pra caber na tela — na impressão isso
+     cortaria colunas fora da largura da página em vez de paginar. */
+  .tbl-wrap [style*="overflow-x"]{overflow:visible!important}
+  .tbl-wrap table{font-size:9px}
+  .tbl-wrap thead{display:table-header-group}
+  .tbl-wrap tbody tr{break-inside:avoid}
+  .search,.sel{display:none!important}
 }
 </style>
 </head>
