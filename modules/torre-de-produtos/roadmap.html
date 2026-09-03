@@ -3884,8 +3884,15 @@ h+='</div>'; // strat-accordion
 document.getElementById("stratInner").innerHTML=h;
 }
 /* ─── DASHBOARDS (gráficos) ─── */
-function svgPieChart(data,size){
-// data: [{label,value,color}]
+function svgPieChart(data,size,opts){
+// data: [{label,value,color}]. opts (tudo opcional): centerFmt (formata o
+// numero central, default identidade — usado pra pizzas de valor em R$),
+// centerLabel (texto abaixo do numero, default "EPICOS"), valFmt (formata
+// o valor no tooltip de cada fatia, default identidade).
+opts=opts||{};
+var centerFmt=opts.centerFmt||function(v){return v;};
+var centerLabel=opts.centerLabel||'EPICOS';
+var valFmt=opts.valFmt||function(v){return v;};
 size=size||180;
 var total=data.reduce(function(s,d){return s+d.value;},0);
 var cx=size/2,cy=size/2,r=size/2-6;
@@ -3901,11 +3908,11 @@ var sx=cx+r*Math.cos(startAngle*Math.PI/180);
 var sy=cy+r*Math.sin(startAngle*Math.PI/180);
 var ex=cx+r*Math.cos(endAngle*Math.PI/180);
 var ey=cy+r*Math.sin(endAngle*Math.PI/180);
-paths+='<path d="M'+cx+' '+cy+' L'+sx.toFixed(2)+' '+sy.toFixed(2)+' A'+r+' '+r+' 0 '+largeArc+' 1 '+ex.toFixed(2)+' '+ey.toFixed(2)+' Z" fill="'+d.color+'" stroke="#fff" stroke-width="1.5"><title>'+d.label+': '+d.value+'</title></path>';
+paths+='<path d="M'+cx+' '+cy+' L'+sx.toFixed(2)+' '+sy.toFixed(2)+' A'+r+' '+r+' 0 '+largeArc+' 1 '+ex.toFixed(2)+' '+ey.toFixed(2)+' Z" fill="'+d.color+'" stroke="#fff" stroke-width="1.5"><title>'+d.label+': '+valFmt(d.value)+'</title></path>';
 startAngle=endAngle;
 });
 var holeR=r*0.55;
-return '<svg viewBox="0 0 '+size+' '+size+'" style="width:100%;max-width:'+size+'px">'+paths+'<circle cx="'+cx+'" cy="'+cy+'" r="'+holeR+'" fill="#fff"/><text x="'+cx+'" y="'+(cy-3)+'" text-anchor="middle" font-size="20" font-weight="900" font-family="Courier New,monospace" fill="var(--navy,#1e3a5c)">'+total+'</text><text x="'+cx+'" y="'+(cy+13)+'" text-anchor="middle" font-size="8" font-weight="700" fill="#94a3b8" letter-spacing="0.5">EPICOS</text></svg>';
+return '<svg viewBox="0 0 '+size+' '+size+'" style="width:100%;max-width:'+size+'px">'+paths+'<circle cx="'+cx+'" cy="'+cy+'" r="'+holeR+'" fill="#fff"/><text x="'+cx+'" y="'+(cy-3)+'" text-anchor="middle" font-size="20" font-weight="900" font-family="Courier New,monospace" fill="var(--navy,#1e3a5c)">'+centerFmt(total)+'</text><text x="'+cx+'" y="'+(cy+13)+'" text-anchor="middle" font-size="8" font-weight="700" fill="#94a3b8" letter-spacing="0.5">'+centerLabel+'</text></svg>';
 }
 function svgBarChart(data,opts){
 // data: [{label,value,color}] vertical bars
@@ -4105,6 +4112,26 @@ var prazoData=[
 {label:"Em andamento",value:andamento,color:"#2563eb"},
 {label:"Atrasados",value:atrasados,color:"#dc2626"}
 ];
+// 7) Rastreamento financeiro completo: onde está o valor do produto.
+// Olha em TODOS os épicos (não só "vis"), porque aqui a ideia é justamente
+// mostrar também o que está isolado no Backlog junto com o que já está
+// em andamento/comprometido — visão única de ponta a ponta.
+var financeBuckets={
+"Setup / Desenvolvimento":{v:0,c:"#2563eb"},
+"Recorrente / Retenção":{v:0,c:"#059669"},
+"Sem tipo definido":{v:0,c:"#d97706"},
+"Em Backlog":{v:0,c:"#7c3aed"}
+};
+DATA.forEach(function(i){
+var v=i.valor||0;
+if(v<=0)return;
+if(isBacklogItem(i))financeBuckets["Em Backlog"].v+=v;
+else if(i.tipoValor==="Retenção")financeBuckets["Recorrente / Retenção"].v+=v;
+else if(i.tipoValor==="Setup / Desenvolvimento")financeBuckets["Setup / Desenvolvimento"].v+=v;
+else financeBuckets["Sem tipo definido"].v+=v;
+});
+var financeTotal=Object.keys(financeBuckets).reduce(function(s,k){return s+financeBuckets[k].v;},0);
+var financePieData=Object.keys(financeBuckets).filter(function(k){return financeBuckets[k].v>0;}).map(function(k){return{label:k,value:financeBuckets[k].v,color:financeBuckets[k].c};});
 var h='';
 h+='<div class="dash-grid">';
 // Card 1: Status
@@ -4119,11 +4146,23 @@ tipoPieData.map(function(d){return '<div class="dash-legend-item"><span class="d
 h+='<div class="dash-card"><div class="dash-card-title">📅 Épicos por Quarter</div>'+svgBarChart(qData,{h:200})+'</div>';
 // Card 4: Horas por Quarter
 h+='<div class="dash-card"><div class="dash-card-title">⏳ Horas Estimadas por Quarter</div>'+svgBarChart(horasData,{h:200,fmtVal:function(v){return v+'h';}})+'</div>';
-// Card 5: Valor monetário ao longo do ano (full width, line chart)
-h+='<div class="dash-card full"><div class="dash-card-title">💰 Valor Monetário ao Longo do Ano <span style="margin-left:auto;font-weight:900;color:#059669;font-family:Courier New,monospace;font-size:11px">'+fmtMoneyShort(totalValorAno)+' total</span></div>'+
+// Card 5: Rastreamento financeiro completo — onde está o valor do produto
+// (Setup, Recorrente, Sem tipo e Backlog, todos juntos numa pizza só)
+h+='<div class="dash-card full"><div class="dash-card-title">💰 Rastreamento Financeiro — Onde Está o Valor do Produto <span style="margin-left:auto;font-weight:900;color:var(--navy);font-family:Courier New,monospace;font-size:11px">'+fmtMoneyShort(financeTotal)+' total</span></div>'+
+(financeTotal===0?'<div style="font-size:8px;color:var(--dim)">Nenhum épico com valor financeiro mapeado ainda.</div>':
+'<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap"><div style="flex-shrink:0">'+svgPieChart(financePieData,150,{centerFmt:fmtMoneyShort,centerLabel:"TOTAL",valFmt:fmtMoneyShort})+'</div><div style="flex:1;min-width:240px">'+
+financePieData.map(function(d){
+var pct=financeTotal?Math.round(d.value/financeTotal*100):0;
+return'<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:9.5px;font-weight:700;color:var(--text)"><span class="dash-legend-dot" style="background:'+d.color+';display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px"></span>'+d.label+'</span><span style="font-size:9.5px;font-weight:800;font-family:Courier New,monospace;color:'+d.color+'">'+fmtMoneyShort(d.value)+' ('+pct+'%)</span></div><div style="height:9px;background:var(--bg4,#f1f5f9);border-radius:5px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+d.color+';border-radius:5px"></div></div></div>';
+}).join('')+
+'</div></div>'+
+(financeBuckets["Em Backlog"].v>0?'<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:7px;padding:6px 10px;margin-top:6px;font-size:8.5px;color:#6d28d9;line-height:1.5">💤 <strong>'+fmtMoneyShort(financeBuckets["Em Backlog"].v)+'</strong> ainda estão no 🗂 Backlog, aguardando priorização — fora da Receita Potencial ativa do Roadmap.</div>':''))+
+'</div>';
+// Card 6: Valor monetário ao longo do ano (full width, line chart)
+h+='<div class="dash-card full"><div class="dash-card-title">📈 Valor Monetário ao Longo do Ano <span style="margin-left:auto;font-weight:900;color:#059669;font-family:Courier New,monospace;font-size:11px">'+fmtMoneyShort(totalValorAno)+' total</span></div>'+
 (totalValorFallback>0?'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:6px 10px;font-size:8.5px;color:#92400e;margin-bottom:10px;line-height:1.5">⚠ <strong>'+fmtMoneyShort(totalValorFallback)+'</strong> deste total é de épicos sem data de entrega definida (contados no fim do quarter/ano como estimativa, não confirmado). Passe o mouse sobre um mês para ver o detalhamento.</div>':'<div style="font-size:8px;color:var(--dim);margin-bottom:10px">Passe o mouse sobre um mês para ver quais épicos compõem o valor.</div>')+
 svgLineChart(monthPoints,{fmtVal:fmtMoneyShort,fmtY:fmtMoneyShort,chartId:"valorAno"})+'</div>';
-// Card 6: Entregues no prazo x andamento x atrasados
+// Card 7: Entregues no prazo x andamento x atrasados
 var totalPrazo=noPrazo+andamento+atrasados;
 h+='<div class="dash-card full"><div class="dash-card-title">✅ Entregues no Prazo × Em Andamento × Atrasados</div><div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap"><div style="flex-shrink:0">'+svgPieChart(prazoData,150)+'</div><div style="flex:1;min-width:220px">'+
 prazoData.map(function(d){
