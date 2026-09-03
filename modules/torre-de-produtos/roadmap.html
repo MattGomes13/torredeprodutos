@@ -19,6 +19,7 @@ html,body{height:100%;font-family:'Segoe UI',system-ui,sans-serif;background:var
 .tb-main{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .brand-title{font-size:17px;font-weight:800;letter-spacing:-.3px;color:#fff}
 .brand-sub{font-size:9px;color:rgba(255,255,255,.5);letter-spacing:1px;text-transform:uppercase;margin-top:1px}
+.brand-bu-badge{display:inline-flex;align-items:center;gap:4px;font-size:8.5px;font-weight:700;color:rgba(255,255,255,.75);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:2px 9px;margin-top:5px}
 .brand-row{display:flex;align-items:center;gap:12px}
 .logo-slot{width:42px;height:42px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,.08);border:1.5px dashed rgba(255,255,255,.3);overflow:hidden;transition:.15s}
 .logo-slot:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.5)}
@@ -685,6 +686,7 @@ body.view-only .brand-title{cursor:default;pointer-events:none}
 <div>
 <div class="brand-title" id="brand-title-el" onclick="editProjectName()" title="Clique para renomear o produto" style="cursor:pointer">Carregando…</div>
 <div class="brand-sub">Visao de Epicos, Entregas e Progresso</div>
+<span class="brand-bu-badge" id="brand-bu-badge" style="display:none">🏢 <span id="brand-bu-nome"></span></span>
 </div>
 <div class="rm-portal-bar">
 <span class="rm-portal-back" onclick="window.location.href='produtos.html'">← Voltar aos produtos</span>
@@ -4248,6 +4250,16 @@ document.title=(name||DEFAULT_PROJECT_NAME);
 }
 function loadProjectName(){
 applyProjectName(CURRENT_PRODUCT?CURRENT_PRODUCT.name:null, DEFAULT_PROJECT_SUB);
+// Selo com a BU (unidade de negócio) do produto — só informativo aqui,
+// puramente individual; quem cruza dados entre produtos de uma mesma BU
+// é o Hub (nos cards), não este roadmap.
+var buBadge=document.getElementById("brand-bu-badge");
+var buNomeEl=document.getElementById("brand-bu-nome");
+if(buBadge&&buNomeEl){
+var bu=CURRENT_PRODUCT&&CURRENT_PRODUCT.bu;
+if(bu){ buNomeEl.textContent=bu; buBadge.style.display="inline-flex"; }
+else{ buBadge.style.display="none"; }
+}
 }
 async function editProjectName(){
 if(!podeEditar())return;

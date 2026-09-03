@@ -524,7 +524,9 @@ function renderRail(){
       'onclick="toggleProduct(\''+key+'\')" title="Clique pra mostrar/ocultar deste painel">'+
       '<div class="pc-drag" title="Arraste para reordenar">⋮⋮</div>'+
       '<div class="pc-top">'+
-        '<div><div class="pc-name" id="pcname_'+key+'">'+p.name+'</div></div>'+
+        '<div><div class="pc-name" id="pcname_'+key+'">'+p.name+'</div>'+
+          (p.bu ? '<div class="pc-sub">'+p.bu+'</div>' : '')+
+        '</div>'+
         '<div class="pc-toggle"></div>'+
       '</div>'+
       '<div class="pc-count">'+total+'</div>'+
