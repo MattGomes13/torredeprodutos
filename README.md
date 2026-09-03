@@ -461,6 +461,16 @@ mais lida por nenhuma tela) — não precisa apagá-la, mas também não tem
 problema rodar `alter table products drop column po_user_id;` depois de
 confirmar que a migração dos dados no passo 2 funcionou.
 
+### Migração: coluna `bu` (unidade de negócio)
+
+Se ao tentar salvar a BU de um produto aparecer o erro `Could not find
+the 'bu' column of 'products' in the schema cache`, é porque essa coluna
+ainda não existe no seu banco (só estava documentada aqui). Rode:
+
+```sql
+alter table products add column if not exists bu text;
+```
+
 ## Rodando localmente
 
 Como não tem build/servidor, basta abrir `index.html` no navegador.
