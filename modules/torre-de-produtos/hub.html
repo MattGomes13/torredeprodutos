@@ -652,8 +652,12 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
       '</div>') +
     secaoColapsavel('estr-entregas', 'Total de entregas por mês', '<span class="cnt">épicos finalizados, por produto</span>',
       '<div id="entregasMensais" class="panel"></div>') +
+    secaoColapsavel('estr-entregasbu', 'Total de entregas por mês (por BU)', '<span class="cnt">épicos finalizados, por BU</span>',
+      '<div id="entregasMensaisBU" class="panel"></div>') +
     secaoColapsavel('estr-valormes', 'Valor entregue por mês', '<span class="cnt">valor de épicos finalizados, por produto</span>',
       '<div id="valorMensal" class="panel"></div>') +
+    secaoColapsavel('estr-valormesbu', 'Valor entregue por mês (por BU)', '<span class="cnt">valor de épicos finalizados, por BU</span>',
+      '<div id="valorMensalBU" class="panel"></div>') +
     secaoColapsavel('estr-epicos', 'Épicos', '',
       '<div class="tbl-wrap">'+
         '<div class="tbl-hdr">'+
@@ -672,7 +676,9 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
   renderByProduct();
   renderByStatus(all);
   renderEntregasMensais();
+  renderEntregasMensaisPorBU();
   renderValorMensal();
+  renderValorMensalPorBU();
   renderFilterSelect();
   renderTable();
 }
@@ -1131,6 +1137,152 @@ function renderValorMensal(){
     : '<div class="entregas-chart">'+colunas+'</div>'+
       '<div class="legend" style="flex-direction:row;flex-wrap:wrap;gap:6px 16px;margin-top:16px">'+legenda+'</div>'+
       '<div style="font-size:10px;color:var(--dim);margin-top:8px">Valor de épicos finalizados por mês de entrega — '+info.ano+'</div>';
+}
+
+/* ============================================================
+   ENTREGAS/VALOR MENSAIS — POR BU (adicional, empilhado por BU em vez
+   de por produto). Mesmos dois gráficos acima, mesma lógica de cálculo,
+   só trocando o agrupamento de produto pra BU.
+   ============================================================ */
+// productKey -> BU (ou "Sem BU definida"), e a cor usada pra cada BU no
+// empilhado (cor do primeiro produto daquela BU) — evita segmentar o
+// gráfico por BU com cores repetidas de forma aleatória.
+function buInfoPorProduto(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var buColor = {};
+  var buOrder = [];
+  var map = {};
+  keys.forEach(function(k){
+    var p = PRODUCTS[k];
+    var bu = (p.bu && p.bu.trim()) || 'Sem BU definida';
+    if(!buColor[bu]){ buColor[bu] = p.color; buOrder.push(bu); }
+    map[k] = bu;
+  });
+  return {map:map, buColor:buColor, buOrder:buOrder};
+}
+
+function calcEntregasMensaisPorBU(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var buInfo = buInfoPorProduto();
+  var anos = [];
+  keys.forEach(function(k){
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(!isNaN(d.getTime())) anos.push(d.getFullYear());
+    });
+  });
+  var ano = anos.length ? anos.sort(function(a,b){return b-a;})[0] : new Date().getFullYear();
+  var meses = [0,1,2,3,4,5,6,7,8,9,10,11].map(function(){ return {}; });
+  keys.forEach(function(k){
+    var bu = buInfo.map[k];
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(isNaN(d.getTime()) || d.getFullYear()!==ano) return;
+      var m = d.getMonth();
+      meses[m][bu] = (meses[m][bu]||0) + 1;
+    });
+  });
+  return {ano:ano, meses:meses, keys:buInfo.buOrder, colors:buInfo.buColor};
+}
+
+function renderEntregasMensaisPorBU(){
+  var info = calcEntregasMensaisPorBU();
+  var MESES_LBL = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var totais = info.meses.map(function(m){
+    return Object.keys(m).reduce(function(s,k){return s+m[k];},0);
+  });
+  var maxTotal = Math.max.apply(null, totais.concat([1]));
+  var semDados = totais.every(function(t){return t===0;});
+
+  var colunas = info.meses.map(function(m, mi){
+    var segs = info.keys.filter(function(k){ return m[k]; }).map(function(k){
+      var h = maxTotal ? (m[k]/maxTotal*100) : 0;
+      return '<div style="height:'+h+'%;background:'+info.colors[k]+'" title="'+k+': '+m[k]+' entrega(s)"></div>';
+    }).join('');
+    return '<div class="entregas-col">'+
+      '<div class="entregas-total">'+(totais[mi]||'')+'</div>'+
+      '<div class="entregas-bar">'+segs+'</div>'+
+      '<div class="entregas-mes-lbl">'+MESES_LBL[mi]+'</div>'+
+    '</div>';
+  }).join('');
+
+  var legenda = info.keys.map(function(k){
+    return '<div class="leg-item"><div class="leg-dot" style="background:'+info.colors[k]+'"></div>'+k+'</div>';
+  }).join('');
+
+  document.getElementById('entregasMensaisBU').innerHTML = semDados
+    ? '<div style="color:var(--dim);font-size:11.5px;padding:20px 0;text-align:center">Nenhum épico finalizado com data de entrega ainda.</div>'
+    : '<div class="entregas-chart">'+colunas+'</div>'+
+      '<div class="legend" style="flex-direction:row;flex-wrap:wrap;gap:6px 16px;margin-top:16px">'+legenda+'</div>'+
+      '<div style="font-size:10px;color:var(--dim);margin-top:8px">Épicos finalizados por mês de entrega, por BU — '+info.ano+'</div>';
+}
+
+function calcValorMensalPorBU(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var buInfo = buInfoPorProduto();
+  var anos = [];
+  keys.forEach(function(k){
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(!isNaN(d.getTime())) anos.push(d.getFullYear());
+    });
+  });
+  var ano = anos.length ? anos.sort(function(a,b){return b-a;})[0] : new Date().getFullYear();
+  var meses = [0,1,2,3,4,5,6,7,8,9,10,11].map(function(){ return {}; });
+  keys.forEach(function(k){
+    var bu = buInfo.map[k];
+    PRODUCTS[k].data.forEach(function(e){
+      if(e.status!=='Finalizado') return;
+      var ds = e.entrega || e.fim;
+      if(!ds) return;
+      var d = new Date(ds+'T00:00:00');
+      if(isNaN(d.getTime()) || d.getFullYear()!==ano) return;
+      var m = d.getMonth();
+      meses[m][bu] = (meses[m][bu]||0) + (e.valor||0);
+    });
+  });
+  return {ano:ano, meses:meses, keys:buInfo.buOrder, colors:buInfo.buColor};
+}
+
+function renderValorMensalPorBU(){
+  var info = calcValorMensalPorBU();
+  var MESES_LBL = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var totais = info.meses.map(function(m){
+    return Object.keys(m).reduce(function(s,k){return s+m[k];},0);
+  });
+  var maxTotal = Math.max.apply(null, totais.concat([1]));
+  var semDados = totais.every(function(t){return t===0;});
+
+  var colunas = info.meses.map(function(m, mi){
+    var segs = info.keys.filter(function(k){ return m[k]; }).map(function(k){
+      var h = maxTotal ? (m[k]/maxTotal*100) : 0;
+      return '<div style="height:'+h+'%;background:'+info.colors[k]+'" title="'+k+': '+fmtBRL(m[k])+'"></div>';
+    }).join('');
+    return '<div class="entregas-col">'+
+      '<div class="entregas-total">'+fmtBRLCurto(totais[mi])+'</div>'+
+      '<div class="entregas-bar">'+segs+'</div>'+
+      '<div class="entregas-mes-lbl">'+MESES_LBL[mi]+'</div>'+
+    '</div>';
+  }).join('');
+
+  var legenda = info.keys.map(function(k){
+    return '<div class="leg-item"><div class="leg-dot" style="background:'+info.colors[k]+'"></div>'+k+'</div>';
+  }).join('');
+
+  document.getElementById('valorMensalBU').innerHTML = semDados
+    ? '<div style="color:var(--dim);font-size:11.5px;padding:20px 0;text-align:center">Nenhum épico finalizado com valor e data de entrega ainda.</div>'
+    : '<div class="entregas-chart">'+colunas+'</div>'+
+      '<div class="legend" style="flex-direction:row;flex-wrap:wrap;gap:6px 16px;margin-top:16px">'+legenda+'</div>'+
+      '<div style="font-size:10px;color:var(--dim);margin-top:8px">Valor de épicos finalizados por mês de entrega, por BU — '+info.ano+'</div>';
 }
 
 function renderByLayer(key){
