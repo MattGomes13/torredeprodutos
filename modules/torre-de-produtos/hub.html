@@ -639,8 +639,12 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
       '<div class="totals" id="totalsRow"></div>') +
     secaoColapsavel('estr-valorproduto', 'Valor mapeado por produto', '',
       '<div id="byProductValue" class="panel"></div>') +
+    secaoColapsavel('estr-valorbu', 'Valor mapeado por BU', '',
+      '<div id="byBUValue" class="panel"></div>') +
     secaoColapsavel('estr-comparativo', 'Comparativo por Produto', '<span class="cnt">destaques por produto</span>',
       '<div id="byBU"></div>') +
+    secaoColapsavel('estr-comparativobu', 'Comparativo por BU', '<span class="cnt">destaques por BU</span>',
+      '<div id="byBUComparativo"></div>') +
     secaoColapsavel('estr-distribuicao', 'Distribuição de épicos', '',
       '<div class="bgrid">'+
         '<div class="panel"><h3>Épicos por produto</h3><div id="byProduct"></div></div>'+
@@ -662,7 +666,9 @@ function renderEstrategica(area, tabsHtml, visibleKeys){
 
   renderTotals(all);
   renderByProductValue();
+  renderValorPorBU();
   renderByBU();
+  renderComparativoPorBU();
   renderByProduct();
   renderByStatus(all);
   renderEntregasMensais();
@@ -902,6 +908,92 @@ function renderByBU(){
       card('🔄','Produto com mais em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
       card('⏱','Produto com mais em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
       card('💰','Produto com maior faturamento', l.valor, function(g){return fmtBRL(g.valor);})+
+    '</div>';
+}
+
+/* ============================================================
+   POR BU — mesmos totalizadores acima ("Valor mapeado por produto" e
+   "Comparativo por Produto"), só que agrupados pela BU cadastrada em
+   cada produto (Produtos → Gerenciar acesso), em vez de por produto.
+   Seções adicionais — não substituem as de cima.
+   ============================================================ */
+// Agrupa os produtos visíveis pela BU. Produto sem BU definida entra no
+// grupo "Sem BU definida", pra nada ficar de fora do totalizador.
+function calcPorBU(){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var buMap = {};
+  var buOrder = [];
+  keys.forEach(function(k){
+    var p = PRODUCTS[k];
+    var buNome = (p.bu && p.bu.trim()) || 'Sem BU definida';
+    if(!buMap[buNome]){
+      buMap[buNome] = {nome:buNome, color:null, epicos:0, finalizados:0, andamento:0, atrasados:0, valor:0, produtos:[]};
+      buOrder.push(buNome);
+    }
+    var g = buMap[buNome];
+    if(!g.color) g.color = p.color; // cor do primeiro produto da BU, só pra identificação visual
+    g.epicos += p.data.length;
+    g.finalizados += p.data.filter(function(e){return e.status==='Finalizado';}).length;
+    g.andamento += p.data.filter(function(e){return e.status==='Em andamento';}).length;
+    g.atrasados += p.data.filter(function(e){return e.status==='Atrasado';}).length;
+    g.valor += p.data.reduce(function(s,e){return s+(e.valor||0);},0);
+    g.produtos.push(p.name);
+  });
+  return buOrder.map(function(nome){return buMap[nome];});
+}
+
+function renderValorPorBU(){
+  var lista = calcPorBU();
+  var maxV = Math.max.apply(null, lista.map(function(g){return g.valor;}).concat([1]));
+  var grandTotal = lista.reduce(function(s,g){return s+g.valor;},0);
+
+  var rows = lista.map(function(g){
+    var pct = maxV ? (g.valor/maxV*100) : 0;
+    var shareOfTotal = grandTotal ? Math.round(g.valor/grandTotal*100) : 0;
+    return '<div class="valrow">'+
+      '<div class="nm" style="color:'+g.color+'" title="'+g.produtos.join(', ')+'">● '+g.nome+'</div>'+
+      '<div class="valbar-track"><div class="valbar-fill" style="width:'+pct+'%;background:'+g.color+'"></div></div>'+
+      '<div class="valamt">'+fmtBRL(g.valor)+'</div>'+
+      '<div class="valpct">'+shareOfTotal+'%</div>'+
+    '</div>';
+  }).join('');
+
+  document.getElementById('byBUValue').innerHTML =
+    '<div class="valgrid-hdr"><span>BU</span><span></span><span>Valor mapeado</span><span>Share</span></div>'+
+    (rows || '<div style="color:var(--dim);font-size:11px;padding:10px 0">Nenhuma BU cadastrada ainda</div>')+
+    '<div class="valrow valrow-total"><div class="nm">TOTAL DO PORTFÓLIO</div><div></div><div class="valamt">'+fmtBRL(grandTotal)+'</div><div class="valpct">100%</div></div>';
+}
+
+function renderComparativoPorBU(){
+  var lista = calcPorBU();
+  function lider(campo){
+    if(!lista.length) return null;
+    var top = lista.reduce(function(a,b){ return (b[campo]>a[campo]) ? b : a; }, lista[0]);
+    return top[campo] > 0 ? top : null;
+  }
+  var l = {
+    epicos: lider('epicos'),
+    finalizados: lider('finalizados'),
+    andamento: lider('andamento'),
+    atrasados: lider('atrasados'),
+    valor: lider('valor')
+  };
+  function card(icon, label, g, formatarValor){
+    var cor = g ? g.color : '#94a3b8';
+    return '<div class="bu-leader-card" style="--c:'+cor+'">'+
+      '<div class="bu-leader-ic">'+icon+'</div>'+
+      '<div class="bu-leader-lbl">'+label+'</div>'+
+      '<div class="bu-leader-nome">'+(g ? g.nome : '—')+'</div>'+
+      '<div class="bu-leader-val">'+(g ? formatarValor(g) : 'sem dados ainda')+'</div>'+
+    '</div>';
+  }
+  document.getElementById('byBUComparativo').innerHTML =
+    '<div class="bu-leader-grid">'+
+      card('📦','BU com mais épicos', l.epicos, function(g){return g.epicos+' épicos';})+
+      card('✅','BU com mais finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
+      card('🔄','BU com mais em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
+      card('⏱','BU com mais em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
+      card('💰','BU com maior faturamento', l.valor, function(g){return fmtBRL(g.valor);})+
     '</div>';
 }
 
