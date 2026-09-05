@@ -50,6 +50,7 @@ html,body{height:100%;font-family:'Segoe UI',system-ui,sans-serif;background:var
 .hdr-btn:hover{background:rgba(255,255,255,.24)}
 .hdr-btn.green{background:rgba(52,211,153,.2);border-color:rgba(52,211,153,.4);color:#34d399}
 .hdr-btn.blue{background:rgba(96,165,250,.2);border-color:rgba(96,165,250,.4);color:#93c5fd}
+.hdr-btn.amber{background:rgba(251,191,36,.2);border-color:rgba(251,191,36,.4);color:#fbbf24}
 /* KPIs */
 .kpis{display:flex;gap:7px;padding-bottom:10px;overflow-x:auto}
 .kpi{flex:1;min-width:95px;padding:7px 11px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:9px;position:relative;overflow:hidden}
@@ -618,6 +619,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 .rm-portal-logout:hover{opacity:1}
 
 body.view-only [onclick="openAdd()"],
+body.view-only [onclick="abrirRascunho()"],
 body.view-only [onclick="saveEdits()"],
 body.view-only [onclick="triggerImport()"],
 body.view-only [onclick="openLayerModal()"],
@@ -696,6 +698,7 @@ body.view-only .brand-title{cursor:default;pointer-events:none}
 <div id="save-ind" class="save-ind saved"><div class="dot"></div><span>Salvo</span></div>
 <button class="hdr-btn" onclick="openLayerModal()" title="Reordenar layers do roadmap">☰ Layers</button>
 <button class="hdr-btn blue" onclick="openAdd()">+ Novo Epico</button>
+<button class="hdr-btn amber" id="btnRascunho" onclick="abrirRascunho()" style="display:none" title="Você tem um épico novo não salvo — clique para continuar de onde parou">📝 Rascunho</button>
 <button class="hdr-btn" onclick="saveEdits()">💾 Salvar</button>
 <button class="hdr-btn green" onclick="exportHTML()">⬇ Exportar HTML</button>
 <button class="hdr-btn" style="background:rgba(251,191,36,.18);border-color:rgba(251,191,36,.4);color:#fbbf24" onclick="triggerImport()">⬆ Importar</button>
@@ -2648,7 +2651,77 @@ document.getElementById("m-tab-3").innerHTML=
 '<textarea style="font-family:Courier New,monospace;font-size:10px;height:240px" readonly>'+JSON.stringify(item,null,2)+'</textarea></div>';
 setMTab(0);
 }
-function closeEdit(){document.getElementById("overlay").className="overlay";EDIT_IDX=-1;}
+function closeEdit(skipDraft){
+// skipDraft=true só quando quem chamou já salvou de verdade (saveEdit) —
+// senão recriaria um rascunho com os dados que acabaram de virar um
+// épico real. Fechar sem salvar (Cancelar/Fechar/clicar fora) não passa
+// esse parâmetro, então o rascunho é guardado normalmente.
+if(!skipDraft)salvarRascunho();
+document.getElementById("overlay").className="overlay";
+EDIT_IDX=-1;
+}
+
+// ── RASCUNHO DE EPICO NOVO ───────────────────────────────────────────────
+// Ao criar um épico novo (não ao editar um já existente), fechar o modal
+// sem salvar (botão Fechar/Cancelar ou clicar fora do overlay) guarda o
+// que já foi preenchido num rascunho local — assim dá pra retomar depois
+// em vez de perder tudo. Um rascunho por produto (não sincroniza com o
+// Supabase, fica só neste navegador).
+function draftKey(){return "bmRoadmapDraftNovoEpico-"+(CURRENT_PRODUCT?CURRENT_PRODUCT.id:"offline");}
+function coletarDadosFormulario(){
+var g=function(id){var el=document.getElementById(id);return el?el.value:undefined;};
+return{
+id:g("f-id"),titulo:g("f-titulo")||"",desc:g("f-desc")||"",
+status:g("f-status"),quarter:g("f-quarter"),tipo:g("f-tipo"),produto:g("f-produto"),
+prog:g("f-prog")!==undefined?(parseInt(g("f-prog"))||0):0,
+prioridade:g("f-prioridade"),modulo:g("f-modulo")||"",po:g("f-po")||"",
+sprint:g("f-sprint")||"",esforco:g("f-esforco")||"",origem:g("f-origem")||"",
+inicio:g("f-inicio")||"",fim:g("f-fim")||"",entrega:g("f-entrega")||"",
+novaInicio:g("f-novaInicio")||"",novaFim:g("f-novaFim")||"",
+valor:g("f-valor")||"",tipoValor:g("f-tipoValor")||"—",
+late:false
+};
+}
+function salvarRascunho(){
+if(EDIT_IDX!==-1)return; // só rascunha épico novo — editar um existente nunca sobrescreve o rascunho
+var dados=coletarDadosFormulario();
+if(!dados.titulo.trim()&&!dados.desc.trim())return; // nada relevante digitado, não vale guardar
+try{
+localStorage.setItem(draftKey(),JSON.stringify({dados:dados,obs:(_editObsList||[]),savedAt:new Date().toISOString()}));
+}catch(e){}
+atualizarBadgeRascunho();
+}
+function limparRascunho(){
+try{localStorage.removeItem(draftKey());}catch(e){}
+atualizarBadgeRascunho();
+}
+function lerRascunho(){
+try{
+var raw=localStorage.getItem(draftKey());
+if(!raw)return null;
+var parsed=JSON.parse(raw);
+if(parsed&&parsed.dados)return parsed;
+}catch(e){}
+return null;
+}
+function atualizarBadgeRascunho(){
+var btn=document.getElementById("btnRascunho");
+if(!btn)return;
+btn.style.display=lerRascunho()?"":"none";
+}
+function abrirRascunho(){
+var r=lerRascunho();
+if(!r){atualizarBadgeRascunho();return;}
+EDIT_IDX=-1;
+var btnClonarNovo=document.getElementById("btnClonarEpico");
+if(btnClonarNovo)btnClonarNovo.style.display="none"; // só clona épico que já existe
+document.getElementById("modal-title").textContent="Novo Epico (rascunho)";
+document.getElementById("modal-sub").textContent="Continuando de onde você parou";
+var dados=r.dados;
+dados.observacoes=r.obs||[];
+renderForm(dados);
+document.getElementById("overlay").className="overlay on";
+}
 
 // ── EFFECTIVE PROGRESS ────────────────────────────────────────────────────
 // Se status=Finalizado → 100%. Se tem atividades → calcula pelas atividades.
@@ -2947,6 +3020,7 @@ newItem.late=newItem.fim&&newItem.status!=="Finalizado"?new Date(newItem.fim)<ne
 if(isBacklogItem(newItem))newItem.faseBacklog="geral"; // entra sempre pela 1a raia do Kanban
 DATA.push(newItem);
 NEXT_ID++;
+limparRascunho(); // épico salvo com sucesso — o rascunho não faz mais falta
 showToast("Epico adicionado!","ok");
 } else {
 var item=DATA[EDIT_IDX];
@@ -2971,7 +3045,7 @@ item.late=item.fim&&item.status!=="Finalizado"?new Date(item.fim)<new Date():fal
 if(isBacklogItem(item)&&(!estavaBacklog||!item.faseBacklog))item.faseBacklog="geral";
 showToast("Epico atualizado!","ok");
 }
-closeEdit();
+closeEdit(true); // já foi salvo de verdade — não precisa (nem deve) virar rascunho
 buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();refreshBacklogViews();
 saveEdits();
 }
@@ -4260,6 +4334,7 @@ var bu=CURRENT_PRODUCT&&CURRENT_PRODUCT.bu;
 if(bu){ buNomeEl.textContent=bu; buBadge.style.display="inline-flex"; }
 else{ buBadge.style.display="none"; }
 }
+atualizarBadgeRascunho();
 }
 async function editProjectName(){
 if(!podeEditar())return;
@@ -4493,6 +4568,7 @@ document.body.classList.add('offline-mode');
 document.querySelectorAll('.rm-portal-bar').forEach(function(el){ el.style.display='none'; });
 reconcileTypes();
 buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();applyZoom();
+atualizarBadgeRascunho();
 setSaveInd(true,DATA.length+" epicos (neste arquivo)");
 (function rebuildActiveViewOffline(){
 var ganttVisible=document.getElementById("ganttView")&&document.getElementById("ganttView").style.display!=="none";
