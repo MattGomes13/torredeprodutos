@@ -5,32 +5,94 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Portal de Sistemas</title>
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+/* ── TELA DE LOGIN (split-screen) ──────────────────────────────────────
+   Só afeta esta página: classes com prefixo "lg-" e o próprio
+   #loginScreen são redefinidos aqui dentro, sem tocar em style.css —
+   setup-admin.html continua com o cartão centralizado de sempre. */
+#loginScreen{min-height:100vh;display:flex;align-items:stretch;justify-content:flex-start;background:var(--bg2);overflow:hidden}
+.lg-side{
+  flex:1 1 46%;position:relative;overflow:hidden;min-width:320px;
+  background:linear-gradient(150deg,var(--navy) 0%,var(--navy2) 55%,#0d2237 100%);
+  display:flex;flex-direction:column;justify-content:space-between;
+  padding:44px 46px;color:#fff;
+}
+.lg-side::before,.lg-side::after,.lg-orb{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.06);pointer-events:none}
+.lg-side::before{width:420px;height:420px;top:-180px;right:-140px;background:rgba(255,255,255,.05)}
+.lg-side::after{width:230px;height:230px;left:-90px;bottom:60px;border:1px solid rgba(255,255,255,.1);background:transparent}
+.lg-orb-a{position:absolute;width:300px;height:300px;border-radius:50%;border:1px solid rgba(255,255,255,.12);left:6%;bottom:-90px}
+.lg-orb-b{position:absolute;width:120px;height:120px;border-radius:50%;background:rgba(220,38,38,.14);right:14%;top:38%}
+.lg-side-top{position:relative;z-index:1;display:flex;align-items:center;gap:10px}
+.lg-side-top .logo-svg{flex-shrink:0}
+.lg-side-top b{font-size:16px;font-weight:800;letter-spacing:-.2px}
+.lg-side-bottom{position:relative;z-index:1;max-width:360px}
+.lg-side-bottom h2{font-size:26px;font-weight:800;line-height:1.25;letter-spacing:-.4px;margin-bottom:12px}
+.lg-side-bottom p{font-size:12.5px;color:rgba(255,255,255,.65);line-height:1.6}
+.lg-form-side{flex:1 1 54%;display:flex;align-items:center;justify-content:center;padding:40px 24px}
+.lg-form-card{width:100%;max-width:360px}
+.lg-form-card h1{font-size:22px;font-weight:800;color:var(--text);margin-bottom:5px;letter-spacing:-.3px}
+.lg-form-card>p{font-size:12px;color:var(--muted);margin-bottom:26px}
+.lg-field{margin-bottom:16px}
+.lg-field label{font-size:11.5px;font-weight:700;color:var(--text);display:block;margin-bottom:6px}
+.lg-field input{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:var(--bg2);color:var(--text);transition:.15s}
+.lg-field input:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(26,58,92,.1)}
+.lg-pass-wrap{position:relative}
+.lg-pass-wrap input{padding-right:38px}
+.lg-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:var(--dim);padding:4px;line-height:1}
+.lg-eye:hover{color:var(--muted)}
+.lg-forgot{text-align:right;margin:-8px 0 20px;font-size:11.5px;color:var(--navy);font-weight:600;cursor:pointer}
+.lg-forgot:hover{text-decoration:underline}
+.lg-btn{width:100%;padding:12px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;transition:background .15s}
+.lg-btn:hover{background:var(--navy2)}
+.lg-btn:disabled{opacity:.6;cursor:default}
+@media (max-width:780px){
+  .lg-side{display:none}
+  .lg-form-side{padding:32px 20px}
+}
+</style>
 </head>
 <body>
 
 <div id="loginScreen">
-  <div class="login-card">
-    <div class="logo">
-      <svg class="logo-svg" width="38" height="38" viewBox="0 0 100 100">
-        <polygon points="50,8 68,22 68,38 50,30" fill="#1a3a5c"/>
-        <polygon points="50,8 32,22 32,38 50,30" fill="#1a3a5c"/>
+  <div class="lg-side">
+    <div class="lg-side-top">
+      <svg class="logo-svg" width="30" height="30" viewBox="0 0 100 100">
+        <polygon points="50,8 68,22 68,38 50,30" fill="#fff"/>
+        <polygon points="50,8 32,22 32,38 50,30" fill="#fff"/>
         <polygon points="50,32 76,48 76,62 50,54" fill="#dc2626"/>
         <polygon points="50,32 24,48 24,62 50,54" fill="#dc2626"/>
-        <polygon points="50,56 84,74 84,94 50,84" fill="#1a3a5c"/>
-        <polygon points="50,56 16,74 16,94 50,84" fill="#1a3a5c"/>
+        <polygon points="50,56 84,74 84,94 50,84" fill="#fff"/>
+        <polygon points="50,56 16,74 16,94 50,84" fill="#fff"/>
       </svg>
-      <div class="logo-tx"><b>Portal de Sistemas</b><span>Acesso unificado</span></div>
+      <b>Portal de Sistemas</b>
     </div>
-    <h1>Acessar plataforma</h1>
-    <p>Entre com suas credenciais</p>
+    <div class="lg-orb-a"></div>
+    <div class="lg-orb-b"></div>
+    <div class="lg-side-bottom">
+      <h2>Toda a gestão dos seus produtos em um só lugar.</h2>
+      <p>Acesse a plataforma para acompanhar roadmaps, equipes e resultados em tempo real.</p>
+    </div>
+  </div>
 
-    <form id="loginForm">
-      <div class="field"><label>Usuário</label><input type="text" id="user" placeholder="seu.usuario" required></div>
-      <div class="field"><label>Senha</label><input type="password" id="pass" placeholder="••••••••" required></div>
-      <p class="error-msg hide" id="loginError">Usuário ou senha inválidos.</p>
-      <div class="forgot">Esqueci minha senha</div>
-      <button class="btn-login" type="submit" id="btnLogin">Entrar</button>
-    </form>
+  <div class="lg-form-side">
+    <div class="lg-form-card">
+      <h1>Login</h1>
+      <p>Acesse sua conta para continuar.</p>
+
+      <form id="loginForm">
+        <div class="lg-field"><label>Usuário</label><input type="text" id="user" placeholder="seu.usuario" required></div>
+        <div class="lg-field">
+          <label>Senha</label>
+          <div class="lg-pass-wrap">
+            <input type="password" id="pass" placeholder="••••••••" required>
+            <button type="button" class="lg-eye" id="btnTogglePass" title="Mostrar senha">👁</button>
+          </div>
+        </div>
+        <p class="error-msg hide" id="loginError">Usuário ou senha inválidos.</p>
+        <div class="lg-forgot">Esqueci minha senha</div>
+        <button class="lg-btn" type="submit" id="btnLogin">Entrar</button>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -43,6 +105,14 @@
   const user = await getUsuarioLogado();
   if (user) window.location.href = 'dashboard.html';
 })();
+
+document.getElementById('btnTogglePass').addEventListener('click', function () {
+  const pass = document.getElementById('pass');
+  const isHidden = pass.type === 'password';
+  pass.type = isHidden ? 'text' : 'password';
+  this.textContent = isHidden ? '🙈' : '👁';
+  this.title = isHidden ? 'Ocultar senha' : 'Mostrar senha';
+});
 
 document.getElementById('loginForm').addEventListener('submit', async function (e) {
   e.preventDefault();
