@@ -1741,6 +1741,8 @@ if(VIEW===0){buildTable();buildLegend();}
 else if(VIEW===1){buildStratDashboard();}
 else if(VIEW===2){buildGantt();}
 else if(VIEW===3){buildList();}
+else if(VIEW===4){buildBacklogList();}
+else if(VIEW===5){buildBacklogKanban();}
 }
 function setPM(m){FILTERS.period=m;FILTERS.periods=[];refreshDP("period");rebuildView();buildKPIs();updateFilterBar();}
 function togglePC(v){toggleF(FILTERS.periods,v);refreshDP("period");rebuildView();buildKPIs();updateFilterBar();}
@@ -1817,7 +1819,8 @@ FILTERS.status.slice(0,2).forEach(function(s){var sc2=SC[s]||SC["—"];tags+='<d
 FILTERS.tipo.slice(0,1).forEach(function(t){var c=TYPES[t]?TYPES[t].c:"#64748b";tags+='<div class="f-tag" style="background:'+c+'">'+t.split("/")[0].substring(0,14)+'<button onclick="toggleTC(\''+t+'\')">&#x2715;</button></div>';});
 FILTERS.sprint.slice(0,4).forEach(function(n){tags+='<div class="f-tag" style="background:#1a3a5c">SP'+n+'<button onclick="toggleSprintC('+n+')">&#x2715;</button></div>';});
 var clearBtn=cnt>0?'<span class="f-clear-all" onclick="clearAll()">&#x2715; Limpar ('+cnt+')</span>':"";
-var badge='<span class="f-count">'+applyFilters().length+' / '+DATA.length+' epicos</span>';
+var contagemAtual=(VIEW===4||VIEW===5)?applyBacklogFilters().length:applyFilters().length;
+var badge='<span class="f-count">'+contagemAtual+' / '+DATA.length+' epicos</span>';
 var searchWasFocused=document.activeElement&&document.activeElement.id==="global-search";
 var searchCursorPos=searchWasFocused?document.activeElement.selectionStart:null;
 document.getElementById("filter-bar").innerHTML=
@@ -2167,7 +2170,10 @@ document.getElementById("ganttView").style.display=v===2?"flex":"none";
 document.getElementById("listView").style.display=v===3?"flex":"none";
 var blv=document.getElementById("backlogListView");if(blv)blv.style.display=v===4?"flex":"none";
 var bkv=document.getElementById("backlogKanbanView");if(bkv)bkv.style.display=v===5?"flex":"none";
-var fb=document.getElementById("filter-bar");if(fb)fb.style.display=v===5?"none":"flex";
+// Filtros (busca, tipo, produto, etc.) ficam disponiveis em todas as
+// visoes, incluindo o Kanban de Backlog — antes ficavam escondidos ali,
+// o que também escondia a busca sem querer.
+var fb=document.getElementById("filter-bar");if(fb)fb.style.display="flex";
 if(v===0){buildTable();buildLegend();}
 if(v===1){applyStratMode();}
 buildSP();
@@ -2415,7 +2421,7 @@ item.titulo+
 function buildBacklogKanban(){
 var board=document.getElementById("kanbanBoard");
 if(!board)return;
-var items=getBacklogItems();
+var items=applyBacklogFilters(); // respeita busca/tipo/produto/prioridade/sprint/periodo, igual a Lista de Backlog
 var byLane={};
 BACKLOG_LANES.forEach(function(l){byLane[l.id]=[];});
 items.forEach(function(i){
