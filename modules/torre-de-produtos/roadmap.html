@@ -1422,17 +1422,19 @@ if(LAYER_ORDER.indexOf(t)<0)LAYER_ORDER.push(t);
 TIPO_OPTS=Object.keys(TYPES);
 }
 var SC={
-"Finalizado":        {c:"#059669",l:"Finalizado"},
-"Em andamento":      {c:"#2563eb",l:"Em andamento"},
-"Em backlog":        {c:"#6366f1",l:"Em backlog"},
-"Esforço levantado": {c:"#64748b",l:"Esforco levantado"},
-"Impedimento":       {c:"#dc2626",l:"Impedimento"},
-"Atrasado":          {c:"#f87171",l:"Atrasado"},
-"Pausado":           {c:"#d97706",l:"Pausado"},
-"—":                 {c:"#94a3b8",l:"—"},
+"Finalizado":            {c:"#059669",l:"Finalizado"},
+"Em andamento":          {c:"#2563eb",l:"Em andamento"},
+"Planejado":             {c:"#0891b2",l:"Planejado"},
+"Alocado em Roadmap":    {c:"#7c3aed",l:"Alocado em Roadmap"},
+"Em backlog":            {c:"#6366f1",l:"Em backlog"},
+"Esforço levantado":     {c:"#64748b",l:"Esforco levantado"},
+"Impedimento":           {c:"#dc2626",l:"Impedimento"},
+"Atrasado":              {c:"#f87171",l:"Atrasado"},
+"Pausado":               {c:"#d97706",l:"Pausado"},
+"—":                     {c:"#94a3b8",l:"—"},
 };
 var QC={Q1:"#1e3a8a",Q2:"#4a1d96",Q3:"#064e3b",Q4:"#7c2d12"};
-var STATUS_OPTS=["Finalizado","Em andamento","Em backlog","Esforço levantado","Impedimento","Atrasado","Pausado"];
+var STATUS_OPTS=["Finalizado","Em andamento","Planejado","Alocado em Roadmap","Em backlog","Esforço levantado","Impedimento","Atrasado","Pausado"];
 var TIPO_OPTS=Object.keys(TYPES);
 var QUARTER_OPTS=["Q1","Q2","Q3","Q4","Backlog"];
 var PRIO_OPTS=["Alta","Média","Baixa","Não Classificado"];
@@ -2149,7 +2151,7 @@ var lb=document.getElementById("legbar");
 if(lb)lb.style.display=(VIEW===1||VIEW===4||VIEW===5)?"none":"flex";
 var items=VIEW===0
 ?Object.entries(TYPES).map(function(e){return[e[1].c,e[0].split("/")[0].trim().substring(0,22)];})
-:[["#059669","Finalizado"],["#2563eb","Em andamento"],
+:[["#059669","Finalizado"],["#2563eb","Em andamento"],["#0891b2","Planejado"],["#7c3aed","Alocado em Roadmap"],
 ["#64748b","Esforco levantado"],["#f87171","Atrasado"],["#d97706","Pausado"]];
 document.getElementById("legbar").innerHTML=
 '<span style="font-size:8px;color:#94a3b8;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-right:4px">'+(VIEW===0?"TIPO:":"STATUS:")+'</span>'+
@@ -2646,6 +2648,23 @@ document.getElementById("m-tab-1").innerHTML=
 '</div>'+
 '<div style="font-size:8px;color:#6b7280;margin-top:8px;line-height:1.5">&#x2139; <strong>Retencao:</strong> receita recorrente ou contrato mantido. <strong>Setup / Desenvolvimento:</strong> valor pontual de implantacao ou projeto.</div>'+
 '</div>'+
+// ── PREVISIBILIDADE ──
+// Marca que a funcionalidade já está prevista no roadmap, mesmo que o
+// valor financeiro dela ainda não tenha sido calculado — por isso o
+// valor previsto é opcional: dá pra marcar só "ainda não dimensionado".
+'<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin-bottom:12px">'+
+'<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:9.5px;font-weight:800;color:#1e40af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:0">'+
+'<input type="checkbox" id="f-previsibilidade" onchange="togglePrevisibilidade()" '+(item.previsibilidade?'checked':'')+'> &#x1F4CA; Previsibilidade</label>'+
+'<div id="previsibilidade-box" style="margin-top:10px;'+(item.previsibilidade?'':'display:none')+'">'+
+'<div class="form-row" style="margin-bottom:8px">'+
+'<label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;margin-bottom:6px;color:var(--text)"><input type="radio" name="f-previs-tipo" id="f-previs-tipo-valor" onchange="togglePrevisTipo()" '+(item.previsibilidadeDimensionado===false?'':'checked')+'> Valor previsto</label>'+
+'<div style="position:relative"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:700;color:#1e40af">R$</span>'+
+'<input type="number" min="0" step="0.01" id="f-previs-valor" value="'+(item.previsibilidadeValor||'')+'" placeholder="0,00" style="padding-left:30px;width:100%"></div>'+
+'</div>'+
+'<label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;color:var(--text)"><input type="radio" name="f-previs-tipo" id="f-previs-tipo-pendente" onchange="togglePrevisTipo()" '+(item.previsibilidadeDimensionado===false?'checked':'')+'> Ainda não foi dimensionado</label>'+
+'<div style="font-size:8px;color:#1e40af;margin-top:8px;opacity:.8">Use isso pra sinalizar que a funcionalidade já está prevista no roadmap, mesmo sem o valor financeiro calculado ainda.</div>'+
+'</div>'+
+'</div>'+
 '<div class="form-row"><label style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Observações</label>'+
 '<div class="obs-list" id="obs-list">'+renderObsItems(item.observacoes||[])+'</div>'+
 '<div class="obs-add-area">'+
@@ -2656,6 +2675,20 @@ document.getElementById("m-tab-3").innerHTML=
 '<div class="form-row"><label>JSON (somente leitura)</label>'+
 '<textarea style="font-family:Courier New,monospace;font-size:10px;height:240px" readonly>'+JSON.stringify(item,null,2)+'</textarea></div>';
 setMTab(0);
+togglePrevisTipo();
+}
+function togglePrevisibilidade(){
+var chk=document.getElementById("f-previsibilidade");
+var box=document.getElementById("previsibilidade-box");
+if(box)box.style.display=(chk&&chk.checked)?"":"none";
+}
+function togglePrevisTipo(){
+var pendente=document.getElementById("f-previs-tipo-pendente");
+var valorInput=document.getElementById("f-previs-valor");
+if(!valorInput)return;
+var isPendente=!!(pendente&&pendente.checked);
+valorInput.disabled=isPendente;
+if(isPendente)valorInput.value="";
 }
 function closeEdit(skipDraft){
 // skipDraft=true só quando quem chamou já salvou de verdade (saveEdit) —
@@ -2676,6 +2709,8 @@ EDIT_IDX=-1;
 function draftKey(){return "bmRoadmapDraftNovoEpico-"+(CURRENT_PRODUCT?CURRENT_PRODUCT.id:"offline");}
 function coletarDadosFormulario(){
 var g=function(id){var el=document.getElementById(id);return el?el.value:undefined;};
+var gChecked=function(id){var el=document.getElementById(id);return el?el.checked:false;};
+var previsOn=gChecked("f-previsibilidade");
 return{
 id:g("f-id"),titulo:g("f-titulo")||"",desc:g("f-desc")||"",
 status:g("f-status"),quarter:g("f-quarter"),tipo:g("f-tipo"),produto:g("f-produto"),
@@ -2685,6 +2720,9 @@ sprint:g("f-sprint")||"",esforco:g("f-esforco")||"",origem:g("f-origem")||"",
 inicio:g("f-inicio")||"",fim:g("f-fim")||"",entrega:g("f-entrega")||"",
 novaInicio:g("f-novaInicio")||"",novaFim:g("f-novaFim")||"",
 valor:g("f-valor")||"",tipoValor:g("f-tipoValor")||"—",
+previsibilidade:previsOn,
+previsibilidadeDimensionado:previsOn?!gChecked("f-previs-tipo-pendente"):null,
+previsibilidadeValor:g("f-previs-valor")||"",
 late:false
 };
 }
@@ -3004,7 +3042,14 @@ function _updateProgFromAtiv(){
 
 function saveEdit(){
 var g=function(id){var el=document.getElementById(id);return el?el.value:null;};
+var gChecked=function(id){var el=document.getElementById(id);return el?el.checked:false;};
 if(!g("f-titulo")||!g("f-titulo").trim()){showToast("Titulo obrigatorio","warn");return;}
+// Previsibilidade: previsibilidadeDimensionado fica null quando o
+// checkbox nem está marcado; só vira true/false quando está marcado
+// (true = tem valor previsto, false = "ainda não foi dimensionado").
+var previsOn=gChecked("f-previsibilidade");
+var previsDimensionado=previsOn?!gChecked("f-previs-tipo-pendente"):null;
+var previsValor=(previsOn&&previsDimensionado)?(parseFloat(g("f-previs-valor"))||0):null;
 if(EDIT_IDX===-1){
 // NEW epic
 var newItem={
@@ -3016,6 +3061,7 @@ prioridade:g("f-prioridade"),prog:0,
 inicio:g("f-inicio")||"",fim:g("f-fim")||"",
 novaInicio:g("f-novaInicio")||"",novaFim:g("f-novaFim")||"",
 valor:parseFloat(g("f-valor"))||0,tipoValor:g("f-tipoValor")||"—",
+previsibilidade:previsOn,previsibilidadeDimensionado:previsDimensionado,previsibilidadeValor:previsValor,
 observacoes:[],atividades:[],
 quarter:g("f-quarter"),late:false
 };
@@ -3040,6 +3086,7 @@ item.prioridade=g("f-prioridade");
 item.inicio=g("f-inicio")||"";item.fim=g("f-fim")||"";
 item.novaInicio=g("f-novaInicio")||"";item.novaFim=g("f-novaFim")||"";
 item.valor=parseFloat(g("f-valor"))||0;item.tipoValor=g("f-tipoValor")||"—";
+item.previsibilidade=previsOn;item.previsibilidadeDimensionado=previsDimensionado;item.previsibilidadeValor=previsValor;
 if(!Array.isArray(item.observacoes))item.observacoes=[];
 item.observacoes=_editObsList.slice();
 if(!Array.isArray(item.atividades))item.atividades=[];
