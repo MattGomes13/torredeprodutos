@@ -910,9 +910,9 @@ function renderByBU(){
   document.getElementById('byBU').innerHTML =
     '<div class="bu-leader-grid">'+
       card('📦','Produto com mais épicos', l.epicos, function(g){return g.epicos+' épicos';})+
-      card('✅','Produto com mais finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
-      card('🔄','Produto com mais em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
-      card('⏱','Produto com mais em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
+      card('✅','Produto com mais épicos finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
+      card('🔄','Produto com mais épicos em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
+      card('⏱','Produto com mais épicos em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
       card('💰','Produto com maior faturamento', l.valor, function(g){return fmtBRL(g.valor);})+
     '</div>';
 }
@@ -996,9 +996,9 @@ function renderComparativoPorBU(){
   document.getElementById('byBUComparativo').innerHTML =
     '<div class="bu-leader-grid">'+
       card('📦','BU com mais épicos', l.epicos, function(g){return g.epicos+' épicos';})+
-      card('✅','BU com mais finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
-      card('🔄','BU com mais em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
-      card('⏱','BU com mais em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
+      card('✅','BU com mais épicos finalizados', l.finalizados, function(g){return g.finalizados+' épicos';})+
+      card('🔄','BU com mais épicos em andamento', l.andamento, function(g){return g.andamento+' épicos';})+
+      card('⏱','BU com mais épicos em atraso', l.atrasados, function(g){return g.atrasados+' épicos';})+
       card('💰','BU com maior faturamento', l.valor, function(g){return fmtBRL(g.valor);})+
     '</div>';
 }
