@@ -471,6 +471,55 @@ ainda não existe no seu banco (só estava documentada aqui). Rode:
 alter table products add column if not exists bu text;
 ```
 
+### Migração: interdependência entre produtos (aviso cruzado)
+
+Permite marcar, ao editar um épico, que ele depende de outro produto —
+isso cria automaticamente um "aviso" (clone laranja, com "Origem: X")
+no roadmap do produto escolhido, mesmo que quem declarou a dependência
+não tenha permissão de editar aquele outro produto diretamente. Rode
+no SQL Editor do Supabase:
+
+```sql
+-- Ambas security definer: rodam ignorando RLS do produto ALVO, mas
+-- exigem que quem chama possa editar o produto DE ORIGEM (de onde a
+-- dependência está sendo declarada) — é assim que Bankmanager consegue
+-- avisar Net Finanças sem precisar virar editor de Net Finanças.
+create or replace function upsert_dependency_clone(p_source_product_id uuid, p_target_product_id uuid, p_source_epic_id text, p_item jsonb)
+returns void language plpgsql security definer as $$
+begin
+  if not (can_manage() or is_product_editor(p_source_product_id)) then
+    raise exception 'sem permissão para declarar dependência a partir deste produto';
+  end if;
+  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
+  insert into epics (product_id, epic_id, item)
+  values (p_target_product_id, p_source_epic_id || '_dep', p_item);
+end;
+$$;
+grant execute on function upsert_dependency_clone(uuid, uuid, text, jsonb) to authenticated;
+
+create or replace function remove_dependency_clone(p_source_product_id uuid, p_target_product_id uuid, p_source_epic_id text)
+returns void language plpgsql security definer as $$
+begin
+  if not (can_manage() or is_product_editor(p_source_product_id)) then
+    raise exception 'sem permissão para remover dependência a partir deste produto';
+  end if;
+  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
+end;
+$$;
+grant execute on function remove_dependency_clone(uuid, uuid, text) to authenticated;
+```
+
+Como funciona: ao marcar "Interdependência com outro produto" num épico
+e escolher o produto, o roadmap chama `upsert_dependency_clone` — isso
+cria uma cópia do épico no produto escolhido, marcada com
+`origemDependencia` (aparece lá em laranja, com "🔗 Origem: <produto
+de origem>"). O épico original ganha um selo "🔗 Depende de: <produto
+escolhido>". Desmarcar o checkbox (ou trocar o produto) chama
+`remove_dependency_clone` e remove o aviso do produto anterior. O
+clone em si não é editável — só pode ser excluído (pelo botão de
+excluir normal, do lado de quem recebeu o aviso) se a dependência não
+existir mais.
+
 ## Rodando localmente
 
 Como não tem build/servidor, basta abrir `index.html` no navegador.

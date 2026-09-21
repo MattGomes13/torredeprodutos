@@ -827,7 +827,7 @@ body.view-only .brand-title{cursor:default;pointer-events:none}
 <div style="display:flex;gap:7px">
 <button class="btn btn-secondary" id="btnClonarEpico" onclick="clonarEpico()" style="display:none" title="Cria uma cópia deste épico e já abre pra editar">📋 Clonar</button>
 <button class="btn btn-secondary" onclick="closeEdit()">Fechar</button>
-<button class="btn btn-primary" onclick="saveEdit()">✓ Salvar</button>
+<button class="btn btn-primary" id="btnSalvarEpico" onclick="saveEdit()">✓ Salvar</button>
 </div>
 </div>
 </div>
@@ -1903,7 +1903,8 @@ cells:[{type:"Q",key:"Q1",qcls:"q1"},{type:"Q",key:"Q2",qcls:"q2"},{type:"Q",key
 }
 function pillHTML(item,catColor){
 var sc2=SC[item.status]||SC["—"];
-var col=VIEW===0?catColor:sc2.c;
+var isClone=isDependencyClone(item);
+var col=isClone?"#f97316":(VIEW===0?catColor:sc2.c);
 var idx=DATA.indexOf(item);
 var valHTML=VIEW===1&&item.esforco?'<span class="pill-val" style="background:'+col+'18;color:'+col+';border:1px solid '+col+'28;font-size:7px">'+item.esforco+'h</span>':"";
 // Revenue badge
@@ -1944,9 +1945,12 @@ var badgeRight=isRelocated?'right:36px':'right:18px';
 return'<div class="pill" style="background:'+col+'0d;border:1px solid '+col+'28;border-left:4px solid '+col+pillBorder+lateStyle+';" '+
 'onmouseenter="showTT(event,'+idx+')" onmouseleave="hideTT()" onmousemove="moveTT(event)">'+
 (isRelocated?'<div class="pill-relocated-badge" title="Épico realocado — nova data definida">!</div>':'')+
+(isClone?'<div class="pill-impedimento-icon" style="'+badgeRight+';background:'+col+'" title="Aviso de dependência">🔗</div>':
 (imped?'<div class="pill-impedimento-icon" style="'+badgeRight+'" title="Impedimento ativo">🔒</div>':
 (late?'<div class="pill-late-exclaim" style="'+badgeRight+'" title="Épico atrasado">!</div>':
-(item.late?'<div class="late-dot" style="'+(isRelocated?'right:36px':'')+'"></div>':'')))+
+(item.late?'<div class="late-dot" style="'+(isRelocated?'right:36px':'')+'"></div>':''))))+
+(isClone?'<div style="font-size:7.5px;color:#fff;font-weight:800;margin-bottom:3px;background:'+col+';border-radius:4px;padding:1px 5px;display:inline-block">&#x1F517; Origem: '+item.origemDependencia.produtoNome+'</div>':
+(item.dependeDe?'<div style="font-size:7.5px;color:#f97316;font-weight:800;margin-bottom:3px;background:#f9731618;border:1px solid #f9731644;border-radius:4px;padding:1px 5px;display:inline-block">&#x1F517; Depende de: '+item.dependeDe.produtoNome+'</div>':''))+
 '<div class="pill-row"><div class="pill-name" style="color:'+col+';font-size:'+fs+'">'+item.titulo+'</div>'+valHTML+'</div>'+
 (valorHTML?'<div style="margin-bottom:3px">'+valorHTML+'</div>':'')+
 novaDataHTML+
@@ -2379,16 +2383,21 @@ if(item.fim)dts.push("Fim: "+fmtDate(item.fim));
 if(item.entrega)dts.push("Entrega: "+fmtDate(item.entrega));
 var listLate=isItemLate(item);
 var listImped=isItemImpedimento(item);
-var listBorder=listImped?'border-color:#7c2d12;box-shadow:0 0 0 1px rgba(124,45,18,.15)':listLate?'border-color:#ef4444;box-shadow:0 0 0 1px rgba(239,68,68,.15)':'';
+var isClone=isDependencyClone(item);
+var CLONE_COLOR="#f97316";
+var listBorder=isClone?'border-color:'+CLONE_COLOR+';box-shadow:0 0 0 1px rgba(249,115,22,.2)':listImped?'border-color:#7c2d12;box-shadow:0 0 0 1px rgba(124,45,18,.15)':listLate?'border-color:#ef4444;box-shadow:0 0 0 1px rgba(239,68,68,.15)':'';
 return'<div class="list-item" onclick="openEdit('+idx+')" onmouseenter="showTT(event,'+idx+')" onmouseleave="hideTT()" onmousemove="moveTT(event)" style="'+listBorder+'">'+
-'<div class="list-stripe" style="background:'+(listImped?"#7c2d12":listLate?"#ef4444":cfg.c)+'"></div>'+
+'<div class="list-stripe" style="background:'+(isClone?CLONE_COLOR:listImped?"#7c2d12":listLate?"#ef4444":cfg.c)+'"></div>'+
 '<div class="list-body">'+
 '<div class="list-title">'+
-(listImped?'<span title="Impedimento ativo" style="margin-right:5px;font-size:13px">🔒</span>':
+(isClone?'<span title="Aviso de dependência" style="margin-right:5px;font-size:13px">🔗</span>':
+listImped?'<span title="Impedimento ativo" style="margin-right:5px;font-size:13px">🔒</span>':
 (listLate?'<span style="background:#ef4444;color:#fff;border-radius:50%;width:14px;height:14px;font-size:8px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;margin-right:5px;flex-shrink:0" title="Atrasado">!</span>':''))+
 item.titulo+
 '</div>'+
 '<div class="list-meta">'+
+(isClone?'<span class="list-tag" style="color:#fff;background:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'">&#x1F517; Origem: '+item.origemDependencia.produtoNome+'</span>':
+item.dependeDe?'<span class="list-tag" style="color:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'44;background:'+CLONE_COLOR+'0f">&#x1F517; Depende de: '+item.dependeDe.produtoNome+'</span>':'')+
 '<span class="list-tag" style="color:'+sc2.c+';border-color:'+sc2.c+'44;background:'+sc2.c+'0f">'+sc2.l+'</span>'+
 '<span class="list-tag" style="color:'+cfg.c+';border-color:'+cfg.c+'44;background:'+cfg.c+'0f">'+item.tipo.split("/")[0].trim().substring(0,22)+'</span>'+
 (item.quarter!="Backlog"?'<span class="list-tag">'+item.quarter+'</span>':'')+
@@ -2445,11 +2454,15 @@ var idx=DATA.indexOf(item);
 var sc2=SC[item.status]||SC["—"];
 var cfg=TYPES[item.tipo]||{c:"#64748b"};
 var pc={"Alta":"#dc2626","Média":"#d97706","Baixa":"#059669"}[item.prioridade]||"#94a3b8";
-return'<div class="kanban-card" draggable="true" data-idx="'+idx+'" onmouseenter="showTT(event,'+idx+')" onmouseleave="hideTT()" onmousemove="moveTT(event)" ondragstart="kbDragStart(event,'+idx+')" ondragend="kbDragEnd(event)">'+
+var isClone=isDependencyClone(item);
+var CLONE_COLOR="#f97316";
+return'<div class="kanban-card" draggable="true" data-idx="'+idx+'" style="'+(isClone?'border-color:'+CLONE_COLOR+';box-shadow:0 0 0 1px rgba(249,115,22,.2)':'')+'" onmouseenter="showTT(event,'+idx+')" onmouseleave="hideTT()" onmousemove="moveTT(event)" ondragstart="kbDragStart(event,'+idx+')" ondragend="kbDragEnd(event)">'+
 '<div class="kanban-card-title" onclick="openEdit('+idx+')">'+
-(item.status==="Impedimento"?'<span title="Impedimento ativo" style="margin-right:4px">🔒</span>':'')+
+(isClone?'<span title="Aviso de dependência" style="margin-right:4px">🔗</span>':(item.status==="Impedimento"?'<span title="Impedimento ativo" style="margin-right:4px">🔒</span>':''))+
 item.titulo+'</div>'+
 '<div class="kanban-card-meta">'+
+(isClone?'<span class="list-tag" style="color:#fff;background:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'">&#x1F517; Origem: '+item.origemDependencia.produtoNome+'</span>':
+item.dependeDe?'<span class="list-tag" style="color:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'44;background:'+CLONE_COLOR+'0f">&#x1F517; Depende de: '+item.dependeDe.produtoNome+'</span>':'')+
 '<span class="list-tag" style="color:'+sc2.c+';border-color:'+sc2.c+'44;background:'+sc2.c+'0f">'+sc2.l+'</span>'+
 '<span class="list-tag" style="color:'+cfg.c+';border-color:'+cfg.c+'44;background:'+cfg.c+'0f">'+item.tipo.split("/")[0].trim().substring(0,18)+'</span>'+
 '<span class="list-tag" style="color:'+pc+'">'+item.prioridade+'</span>'+
@@ -2572,11 +2585,19 @@ function openEdit(idx){
 EDIT_IDX=idx;
 document.getElementById("tt").className="tt";
 var item=DATA[idx];
-document.getElementById("modal-title").textContent="Editar Epico";
+var isClone=isDependencyClone(item);
+document.getElementById("modal-title").textContent=isClone?"Aviso de dependência (somente leitura)":"Editar Epico";
 document.getElementById("modal-sub").textContent=item.id+" &middot; "+item.tipo;
 renderForm(item);
 var btnClonar=document.getElementById("btnClonarEpico");
-if(btnClonar)btnClonar.style.display=podeEditar()?"":"none";
+if(btnClonar)btnClonar.style.display=(podeEditar()&&!isClone)?"":"none";
+var btnSalvar=document.getElementById("btnSalvarEpico");
+if(btnSalvar)btnSalvar.style.display=isClone?"none":"";
+if(isClone){
+// Aviso automático de dependência: só dá pra ver e excluir, não editar
+// (editar aqui não refletiria no épico original do outro produto).
+document.querySelectorAll("#overlay .modal-body input,#overlay .modal-body select,#overlay .modal-body textarea").forEach(function(el){el.disabled=true;});
+}
 document.getElementById("overlay").className="overlay on";
 }
 function openAdd(){
@@ -2594,6 +2615,18 @@ document.getElementById("modal-sub").textContent="Preencha os campos abaixo";
 renderForm(blankItem);
 document.getElementById("overlay").className="overlay on";
 }
+// ── INTERDEPENDÊNCIA ENTRE PRODUTOS ──────────────────────────────────────
+// Lista de outros produtos do portal (pra escolher com qual há dependência).
+// Carregada uma vez no início do roadmap; renderForm() só lê o cache.
+var OUTROS_PRODUTOS_CACHE=null;
+async function carregarOutrosProdutos(){
+if(!CURRENT_PRODUCT)return;
+try{
+var {data}=await supabaseClient.from('products').select('id,name').neq('id',CURRENT_PRODUCT.id).order('name');
+OUTROS_PRODUTOS_CACHE=data||[];
+}catch(e){OUTROS_PRODUTOS_CACHE=[];}
+}
+function isDependencyClone(item){return !!(item&&item.origemDependencia);}
 function renderForm(item){
 var prodOpts=[...new Set(DATA.map(function(i){return i.produto;}).concat([(CURRENT_PRODUCT&&CURRENT_PRODUCT.name)||""]))].filter(Boolean);
 document.getElementById("m-tab-0").innerHTML=
@@ -2665,6 +2698,29 @@ document.getElementById("m-tab-1").innerHTML=
 '<div style="font-size:8px;color:#1e40af;margin-top:8px;opacity:.8">Use isso pra sinalizar que a funcionalidade já está prevista no roadmap, mesmo sem o valor financeiro calculado ainda.</div>'+
 '</div>'+
 '</div>'+
+// ── INTERDEPENDÊNCIA COM OUTRO PRODUTO ──
+// Se este épico É um clone/aviso (veio de outro produto), mostra só um
+// banner explicativo — um aviso não pode declarar dependência de outro.
+// Senão, mostra o checkbox + seletor de produto normalmente.
+(isDependencyClone(item)?
+'<div style="background:#fff7ed;border:1.5px solid #fdba74;border-radius:10px;padding:12px 14px;margin-bottom:12px">'+
+'<div style="font-size:9.5px;font-weight:800;color:#9a3412;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">&#x1F517; Aviso de dependência</div>'+
+'<div style="font-size:10.5px;color:#9a3412;line-height:1.6">Este épico é um <strong>aviso automático</strong> vindo do produto <strong>'+item.origemDependencia.produtoNome+'</strong> — não pode ser editado por aqui. Se a dependência não existir mais, exclua este épico (o original em '+item.origemDependencia.produtoNome+' não é afetado).</div>'+
+'</div>'
+:
+'<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:12px">'+
+'<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:9.5px;font-weight:800;color:#9a3412;text-transform:uppercase;letter-spacing:.5px;margin-bottom:0">'+
+'<input type="checkbox" id="f-interdep" onchange="toggleInterdependencia()" '+(item.dependeDe?'checked':'')+'> &#x1F517; Interdependência com outro produto</label>'+
+'<div id="interdep-box" style="margin-top:10px;'+(item.dependeDe?'':'display:none')+'">'+
+'<div class="form-row" style="margin-bottom:4px"><label>Produto dependente</label>'+
+'<select id="f-interdep-produto">'+
+'<option value="">— selecione —</option>'+
+(OUTROS_PRODUTOS_CACHE||[]).map(function(p){return'<option value="'+p.id+'" '+((item.dependeDe&&item.dependeDe.produtoId===p.id)?'selected':'')+'>'+p.name+'</option>';}).join('')+
+'</select></div>'+
+'<div style="font-size:8px;color:#9a3412;opacity:.85;line-height:1.5">Ao salvar, um card de aviso (&#x1F517; origem: '+(CURRENT_PRODUCT?CURRENT_PRODUCT.name:'este produto')+') aparece automaticamente no roadmap do produto selecionado. Desmarque e salve pra remover o aviso de lá.</div>'+
+'</div>'+
+'</div>'
+)+
 '<div class="form-row"><label style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Observações</label>'+
 '<div class="obs-list" id="obs-list">'+renderObsItems(item.observacoes||[])+'</div>'+
 '<div class="obs-add-area">'+
@@ -2689,6 +2745,12 @@ if(!valorInput)return;
 var isPendente=!!(pendente&&pendente.checked);
 valorInput.disabled=isPendente;
 if(isPendente)valorInput.value="";
+}
+function toggleInterdependencia(){
+var chk=document.getElementById("f-interdep");
+var box=document.getElementById("interdep-box");
+if(box)box.style.display=(chk&&chk.checked)?"":"none";
+if(chk&&chk.checked&&OUTROS_PRODUTOS_CACHE===null)carregarOutrosProdutos(); // rede lenta/aba aberta há muito tempo: tenta de novo
 }
 function closeEdit(skipDraft){
 // skipDraft=true só quando quem chamou já salvou de verdade (saveEdit) —
@@ -3040,7 +3102,7 @@ function _updateProgFromAtiv(){
   if(typeof buildGantt==="function"&&document.getElementById("ganttView").style.display!=="none")buildGantt();
 }
 
-function saveEdit(){
+async function saveEdit(){
 var g=function(id){var el=document.getElementById(id);return el?el.value:null;};
 var gChecked=function(id){var el=document.getElementById(id);return el?el.checked:false;};
 if(!g("f-titulo")||!g("f-titulo").trim()){showToast("Titulo obrigatorio","warn");return;}
@@ -3050,6 +3112,19 @@ if(!g("f-titulo")||!g("f-titulo").trim()){showToast("Titulo obrigatorio","warn")
 var previsOn=gChecked("f-previsibilidade");
 var previsDimensionado=previsOn?!gChecked("f-previs-tipo-pendente"):null;
 var previsValor=(previsOn&&previsDimensionado)?(parseFloat(g("f-previs-valor"))||0):null;
+// Interdependência: dependeDepois é o estado NOVO (o que está marcado
+// agora no formulário); dependeAntes é lido mais abaixo, antes de
+// sobrescrever o item — a diferença entre os dois decide se precisa
+// criar, trocar ou remover o aviso no produto alvo.
+var interdepOn=gChecked("f-interdep");
+var interdepProdutoId=interdepOn?(g("f-interdep-produto")||""):"";
+var interdepProdutoNome=null;
+if(interdepProdutoId&&OUTROS_PRODUTOS_CACHE){
+var achadoInterdep=OUTROS_PRODUTOS_CACHE.filter(function(p){return p.id===interdepProdutoId;})[0];
+interdepProdutoNome=achadoInterdep?achadoInterdep.name:null;
+}
+var dependeDepois=(interdepOn&&interdepProdutoId&&interdepProdutoNome)?{produtoId:interdepProdutoId,produtoNome:interdepProdutoNome}:null;
+var dependeAntes=null;
 if(EDIT_IDX===-1){
 // NEW epic
 var newItem={
@@ -3062,6 +3137,7 @@ inicio:g("f-inicio")||"",fim:g("f-fim")||"",
 novaInicio:g("f-novaInicio")||"",novaFim:g("f-novaFim")||"",
 valor:parseFloat(g("f-valor"))||0,tipoValor:g("f-tipoValor")||"—",
 previsibilidade:previsOn,previsibilidadeDimensionado:previsDimensionado,previsibilidadeValor:previsValor,
+dependeDe:dependeDepois,
 observacoes:[],atividades:[],
 quarter:g("f-quarter"),late:false
 };
@@ -3076,6 +3152,7 @@ limparRascunho(); // épico salvo com sucesso — o rascunho não faz mais falta
 showToast("Epico adicionado!","ok");
 } else {
 var item=DATA[EDIT_IDX];
+dependeAntes=item.dependeDe||null;
 var estavaBacklog=isBacklogItem(item);
 item.id=g("f-id")||item.id;
 item.titulo=g("f-titulo");item.desc=g("f-desc")||"";
@@ -3087,6 +3164,7 @@ item.inicio=g("f-inicio")||"";item.fim=g("f-fim")||"";
 item.novaInicio=g("f-novaInicio")||"";item.novaFim=g("f-novaFim")||"";
 item.valor=parseFloat(g("f-valor"))||0;item.tipoValor=g("f-tipoValor")||"—";
 item.previsibilidade=previsOn;item.previsibilidadeDimensionado=previsDimensionado;item.previsibilidadeValor=previsValor;
+item.dependeDe=dependeDepois;
 if(!Array.isArray(item.observacoes))item.observacoes=[];
 item.observacoes=_editObsList.slice();
 if(!Array.isArray(item.atividades))item.atividades=[];
@@ -3098,9 +3176,38 @@ item.late=item.fim&&item.status!=="Finalizado"?new Date(item.fim)<new Date():fal
 if(isBacklogItem(item)&&(!estavaBacklog||!item.faseBacklog))item.faseBacklog="geral";
 showToast("Epico atualizado!","ok");
 }
+var itemSalvo=(EDIT_IDX===-1)?newItem:item; // captura antes do closeEdit resetar EDIT_IDX
 closeEdit(true); // já foi salvo de verdade — não precisa (nem deve) virar rascunho
 buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();refreshBacklogViews();
 saveEdits();
+sincronizarDependencia(itemSalvo,dependeAntes,dependeDepois);
+}
+// ── INTERDEPENDÊNCIA: cria/atualiza/remove o aviso (clone laranja) no
+// roadmap do outro produto via RPC — funciona mesmo sem ser editor lá,
+// só precisa poder editar ESTE produto (de onde a dependência é
+// declarada). Só mexe em algo se o produto-alvo realmente mudou.
+async function sincronizarDependencia(item,antes,depois){
+if(!CURRENT_PRODUCT)return; // modo offline: sem cross-produto
+var antesId=antes?antes.produtoId:null;
+var depoisId=depois?depois.produtoId:null;
+if(antesId===depoisId)return;
+try{
+if(antesId){
+await supabaseClient.rpc('remove_dependency_clone',{p_source_product_id:CURRENT_PRODUCT.id,p_target_product_id:antesId,p_source_epic_id:item.id});
+}
+if(depoisId){
+var clone=JSON.parse(JSON.stringify(item));
+clone.origemDependencia={produtoId:CURRENT_PRODUCT.id,produtoNome:CURRENT_PRODUCT.name,epicoOrigemId:item.id};
+delete clone.dependeDe;
+var {error}=await supabaseClient.rpc('upsert_dependency_clone',{p_source_product_id:CURRENT_PRODUCT.id,p_target_product_id:depoisId,p_source_epic_id:item.id,p_item:clone});
+if(error)throw error;
+showToast("Aviso de dependência enviado pra "+depois.produtoNome,"ok");
+} else if(antesId){
+showToast("Aviso de dependência removido","ok");
+}
+}catch(e){
+showToast("Erro ao sincronizar dependência: "+e.message,"err");
+}
 }
 // ── CLONAR ────────────────────────────────────────────────────────────────
 // Duplica o épico que está sendo editado (aplicando primeiro o que já
@@ -3110,12 +3217,16 @@ saveEdits();
 function clonarEpico(){
 if(EDIT_IDX<0)return; // só clona um épico que já existe (não um "novo" ainda não salvo)
 if(!podeEditar())return;
+if(isDependencyClone(DATA[EDIT_IDX]))return; // aviso de dependência não pode ser clonado
 var idxOriginal=EDIT_IDX;
 saveEdit(); // aplica o formulário no item original, fecha o modal e salva
 var original=DATA[idxOriginal];
 if(!original)return;
 var clone=JSON.parse(JSON.stringify(original));
 clone.id=(original.id||"EP")+"_copia"+NEXT_ID;
+// A cópia não herda a interdependência do original — o aviso cruzado
+// não existe pra ela ainda; se precisar, marque de novo e salve.
+clone.dependeDe=null;
 NEXT_ID++;
 DATA.push(clone);
 var novoIdx=DATA.length-1;
@@ -4652,6 +4763,7 @@ document.body.innerHTML='<div style="padding:60px;text-align:center;color:#64748
 return;
 }
 CURRENT_PRODUCT=product;
+carregarOutrosProdutos(); // fire-and-forget — só precisa estar pronto quando abrirem o modal
 var isAdminOuManager=ctx.perfil&&(ctx.perfil.role==='admin'||ctx.perfil.role==='manager');
 if(isAdminOuManager){
 ACCESS_LEVEL='admin';
