@@ -1951,7 +1951,7 @@ return'<div class="pill" style="background:'+col+'0d;border:1px solid '+col+'28;
 (item.late?'<div class="late-dot" style="'+(isRelocated?'right:36px':'')+'"></div>':''))))+
 (isClone?'<div style="font-size:7.5px;color:#fff;font-weight:800;margin-bottom:3px;background:'+col+';border-radius:4px;padding:1px 5px;display:inline-block">&#x1F517; Origem: '+item.origemDependencia.produtoNome+'</div>':
 (item.dependeDe?'<div style="font-size:7.5px;color:#f97316;font-weight:800;margin-bottom:3px;background:#f9731618;border:1px solid #f9731644;border-radius:4px;padding:1px 5px;display:inline-block">&#x1F517; Depende de: '+item.dependeDe.produtoNome+'</div>':''))+
-'<div class="pill-row"><div class="pill-name" style="color:'+col+';font-size:'+fs+'">'+item.titulo+'</div>'+valHTML+'</div>'+
+'<div class="pill-row"><div class="pill-name" style="color:'+col+';font-size:'+fs+'">'+(item.divulgar?'<span title="Marcado pra divulgar quando entregue">&#x1F4E2; </span>':'')+item.titulo+'</div>'+valHTML+'</div>'+
 (valorHTML?'<div style="margin-bottom:3px">'+valorHTML+'</div>':'')+
 novaDataHTML+
 sprintTag+
@@ -2398,6 +2398,7 @@ item.titulo+
 '<div class="list-meta">'+
 (isClone?'<span class="list-tag" style="color:#fff;background:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'">&#x1F517; Origem: '+item.origemDependencia.produtoNome+'</span>':
 item.dependeDe?'<span class="list-tag" style="color:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'44;background:'+CLONE_COLOR+'0f">&#x1F517; Depende de: '+item.dependeDe.produtoNome+'</span>':'')+
+(item.divulgar?'<span class="list-tag" title="Marcado pra divulgar quando entregue" style="color:#7c3aed;border-color:#7c3aed44;background:#7c3aed0f">&#x1F4E2; Divulgar</span>':'')+
 '<span class="list-tag" style="color:'+sc2.c+';border-color:'+sc2.c+'44;background:'+sc2.c+'0f">'+sc2.l+'</span>'+
 '<span class="list-tag" style="color:'+cfg.c+';border-color:'+cfg.c+'44;background:'+cfg.c+'0f">'+item.tipo.split("/")[0].trim().substring(0,22)+'</span>'+
 (item.quarter!="Backlog"?'<span class="list-tag">'+item.quarter+'</span>':'')+
@@ -2463,6 +2464,7 @@ item.titulo+'</div>'+
 '<div class="kanban-card-meta">'+
 (isClone?'<span class="list-tag" style="color:#fff;background:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'">&#x1F517; Origem: '+item.origemDependencia.produtoNome+'</span>':
 item.dependeDe?'<span class="list-tag" style="color:'+CLONE_COLOR+';border-color:'+CLONE_COLOR+'44;background:'+CLONE_COLOR+'0f">&#x1F517; Depende de: '+item.dependeDe.produtoNome+'</span>':'')+
+(item.divulgar?'<span class="list-tag" title="Marcado pra divulgar quando entregue" style="color:#7c3aed;border-color:#7c3aed44;background:#7c3aed0f">&#x1F4E2;</span>':'')+
 '<span class="list-tag" style="color:'+sc2.c+';border-color:'+sc2.c+'44;background:'+sc2.c+'0f">'+sc2.l+'</span>'+
 '<span class="list-tag" style="color:'+cfg.c+';border-color:'+cfg.c+'44;background:'+cfg.c+'0f">'+item.tipo.split("/")[0].trim().substring(0,18)+'</span>'+
 '<span class="list-tag" style="color:'+pc+'">'+item.prioridade+'</span>'+
@@ -2721,6 +2723,12 @@ document.getElementById("m-tab-1").innerHTML=
 '</div>'+
 '</div>'
 )+
+// ── DIVULGAÇÃO ── só uma flag/lembrete: marca se esse épico deve ser
+// divulgado (comunicado) quando sair, sem nenhuma lógica a mais.
+'<div class="form-row" style="margin-bottom:14px">'+
+'<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text)">'+
+'<input type="checkbox" id="f-divulgar" '+(item.divulgar?'checked':'')+'> &#x1F4E2; Divulgar este épico quando for entregue</label>'+
+'</div>'+
 '<div class="form-row"><label style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Observações</label>'+
 '<div class="obs-list" id="obs-list">'+renderObsItems(item.observacoes||[])+'</div>'+
 '<div class="obs-add-area">'+
@@ -2785,6 +2793,7 @@ valor:g("f-valor")||"",tipoValor:g("f-tipoValor")||"—",
 previsibilidade:previsOn,
 previsibilidadeDimensionado:previsOn?!gChecked("f-previs-tipo-pendente"):null,
 previsibilidadeValor:g("f-previs-valor")||"",
+divulgar:gChecked("f-divulgar"),
 late:false
 };
 }
@@ -3125,6 +3134,7 @@ interdepProdutoNome=achadoInterdep?achadoInterdep.name:null;
 }
 var dependeDepois=(interdepOn&&interdepProdutoId&&interdepProdutoNome)?{produtoId:interdepProdutoId,produtoNome:interdepProdutoNome}:null;
 var dependeAntes=null;
+var divulgar=gChecked("f-divulgar"); // flag simples, só lembrete — sem lógica associada
 if(EDIT_IDX===-1){
 // NEW epic
 var newItem={
@@ -3137,7 +3147,7 @@ inicio:g("f-inicio")||"",fim:g("f-fim")||"",
 novaInicio:g("f-novaInicio")||"",novaFim:g("f-novaFim")||"",
 valor:parseFloat(g("f-valor"))||0,tipoValor:g("f-tipoValor")||"—",
 previsibilidade:previsOn,previsibilidadeDimensionado:previsDimensionado,previsibilidadeValor:previsValor,
-dependeDe:dependeDepois,
+dependeDe:dependeDepois,divulgar:divulgar,
 observacoes:[],atividades:[],
 quarter:g("f-quarter"),late:false
 };
@@ -3164,7 +3174,7 @@ item.inicio=g("f-inicio")||"";item.fim=g("f-fim")||"";
 item.novaInicio=g("f-novaInicio")||"";item.novaFim=g("f-novaFim")||"";
 item.valor=parseFloat(g("f-valor"))||0;item.tipoValor=g("f-tipoValor")||"—";
 item.previsibilidade=previsOn;item.previsibilidadeDimensionado=previsDimensionado;item.previsibilidadeValor=previsValor;
-item.dependeDe=dependeDepois;
+item.dependeDe=dependeDepois;item.divulgar=divulgar;
 if(!Array.isArray(item.observacoes))item.observacoes=[];
 item.observacoes=_editObsList.slice();
 if(!Array.isArray(item.atividades))item.atividades=[];
