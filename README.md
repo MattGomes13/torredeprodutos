@@ -536,15 +536,21 @@ python -m http.server 8000
 ## Como funciona o módulo "Torre de Produtos"
 
 - **`home.html`** → escolher entre "Hub de Produtos" e "Produtos" (Stakeholder não vê o card do Hub).
-- **`hub.html`** → busca os produtos e épicos **direto do Supabase** (as mesmas tabelas `products`/`epics` que `roadmap.html` usa) e monta uma visão consolidada (financeiro, comparativo por BU, tempo médio de desenvolvimento, status geral, tabela combinada). Não existe mais upload/importação manual — qualquer produto criado, ou roadmap atualizado, em Produtos aparece aqui automaticamente na próxima vez que a tela carrega (ou clicando em "🔄 Atualizar"). Quem acessa vê só os produtos que o RLS já libera pra ele (admin/manager: todos; PO: só o(s) dele). **Stakeholder não tem acesso** (nem tela). A tabela `hubs` (usada numa versão anterior, baseada em upload) ficou sem uso — pode ser removida do banco se quiser, não afeta nada.
-  - Botão **"🎤 Apresentação"**: exporta o painel (Visão Estratégica) em **PowerPoint** (slides com KPIs, comparativo por BU e valor por produto) ou **PDF** (abre a impressão do navegador — escolher "Salvar como PDF" no destino).
-  - **BU (área de negócio)**: campo opcional por produto, definido em Produtos → Gerenciar acesso. Produto sem BU entra no grupo "Sem BU definida" no comparativo.
+- **`hub.html`** ("Torre de Controle") → busca os produtos e épicos **direto do Supabase** (as mesmas tabelas `products`/`epics` que `roadmap.html` usa) e monta uma visão consolidada. Não existe mais upload/importação manual — qualquer produto criado, ou roadmap atualizado, em Produtos aparece aqui automaticamente na próxima vez que a tela carrega (ou clicando em "🔄 Atualizar"). Quem acessa vê só os produtos que o RLS já libera pra ele. **Stakeholder não tem acesso** (nem tela).
+  - Abas: Estratégica (padrão), Acompanhamento, e uma aba por produto.
+  - Dentro de Estratégica: KPIs consolidados, valor mapeado **por produto** e **por BU**, comparativo de destaques **por Produto** e **por BU** (mais épicos, mais finalizados, mais em andamento, mais em atraso, maior faturamento), distribuição de épicos, entregas mensais **por produto** e **por BU**, valor entregue mensal **por produto** e **por BU**, tabela combinada. No modo "Dashboards" tem também um card de rastreamento financeiro completo (Setup + Recorrente + Sem tipo + **Em Backlog**, olhando todos os épicos).
+  - **BU (unidade de negócio)**: campo opcional por produto, definido em Produtos → Gerenciar acesso (com sugestão/autocomplete das BUs já usadas, pra evitar grafias diferentes da mesma BU). Produto sem BU entra no grupo "Sem BU definida". Aparece como selo nos cards de produto e no cabeçalho do roadmap.
+  - Botão **"🎤 Apresentação"**: exporta o painel em **PowerPoint** ou **PDF**.
 - **`produtos.html`** → mostra os produtos que o usuário logado pode acessar:
-  - **Admin e Manager**: veem todos os produtos, podem criar novos e definir quem é o PO e quais stakeholders têm acesso de cada um (botão "Gerenciar acesso"). A única diferença entre os dois é que **só Admin cria/edita contas de usuário**.
-  - **PO**: vê só o(s) produto(s) em que é o responsável, com acesso total de edição.
-  - **Stakeholder**: vê só os produtos liberados pra ele, em modo **somente leitura**.
-- **`roadmap.html?product=<id>`** → o roadmap completo de 1 produto (o mesmo roadmap "Torre de Produtos" que você já usava localmente: Gantt, visão estratégica/financeira, lista, filtros, exportar Excel/PPT, gestão de layers, white-label, etc.), agora lendo/gravando os épicos na tabela `epics` do Supabase em vez de `localStorage`. Admin, Manager e PO podem editar; Stakeholder só visualiza (os botões de criar/editar/excluir/importar ficam ocultos, e o Supabase também bloqueia essas ações no banco por segurança, mesmo que alguém tente burlar a tela).
-  - Botão **"⬆ Importar"**: sobe um `.html` de roadmap já exportado (como os que você já tinha rodando localmente) e carrega todos os épicos, tipos e layers dele para dentro do produto atual no Supabase — é assim que cada PO migra os dados que já tinha, sem precisar redigitar nada.
+  - **Admin e Manager**: veem todos os produtos, podem criar novos e, em "Gerenciar acesso", associar **cada usuário** (não só um "PO único") a um nível — **sem acesso / só visualizar / editar e visualizar** — por produto. Um mesmo usuário pode ter acesso a vários produtos, e um mesmo produto pode ter vários editores ao mesmo tempo. A única diferença entre Admin e Manager é que **só Admin cria/edita contas de usuário**.
+  - **PO/Stakeholder**: veem só os produtos liberados pra eles, com uma tag indicando se podem editar ou só visualizar (o nível vem da associação, não do "perfil" da conta).
+- **`roadmap.html?product=<id>`** → o roadmap completo de 1 produto (Gantt, visão estratégica/financeira, lista, **Lista Backlog**, **Kanban de Backlog**, filtros, exportar Excel/PPT, gestão de layers, white-label, etc.), lendo/gravando os épicos na tabela `epics` do Supabase. Quem tem `pode_editar=true` nesse produto edita; quem não tem, só visualiza (os botões de criar/editar/excluir/importar ficam ocultos, e o Supabase também bloqueia essas ações no banco por segurança).
+  - Épicos com status **Em backlog** ou **Impedimento** ficam isolados do Roadmap/Gantt/Lista/Estratégico — só aparecem em **📋 Lista Backlog** e **🗂 Backlog** (Kanban de 5 raias; mover um card pra "Enviado para Delivery" muda o status pra "Em andamento" automaticamente).
+  - Aba Detalhe do épico tem **Previsibilidade** (valor previsto ou "ainda não dimensionado"), **Interdependência com outro produto** (cria um aviso/clone laranja no roadmap do produto escolhido — ver README seção de migração e código pra detalhe) e **Divulgar** (flag simples, só lembrete).
+  - Fechar "Novo Épico" sem salvar guarda um **rascunho** local recuperável (botão "📝 Rascunho" no cabeçalho).
+  - Botão **"📋 Clonar"** (no editar) duplica o épico — útil pra itens quase iguais entre produtos/bancos diferentes.
+  - Botão **"⬆ Importar"**: sobe um `.html` de roadmap já exportado e carrega todos os épicos, tipos e layers pra dentro do produto atual no Supabase.
+  - Reabrir um `.html` exportado localmente (sem estar no portal) entra em modo offline: edição completa, mas sem Salvar/Importar/Limpar (não fazem sentido sem o Supabase do outro lado) — é assim que alguém fora do portal edita e devolve o arquivo pra reimportação.
 - **`admin-usuarios.html`** → Admin e Manager enxergam esta tela (Manager com opções mais restritas). Lista todos os usuários do portal, mostra o último login, permite editar perfil/ativar-desativar/redefinir senha de cada um, e cria novos usuários (Admin escolhe entre Admin/Manager/PO/Stakeholder; Manager só entre PO/Stakeholder), usuário e senha diretamente. Criar como PO exige associar a pelo menos 1 produto.
 
 ## Publicar no GitHub (e deixar online)
@@ -604,15 +610,15 @@ extra).
 |---|---|---|---|---|
 | **Admin** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ✅ qualquer perfil |
 | **Manager** | ✅ todos os produtos | ✅ todos os produtos | ✅ | ✅ só PO e Stakeholder |
-| **PO** | ❌ | ✅ só o(s) produto(s) dele | ✅ | ❌ |
-| **Stakeholder** | ❌ | ❌ (só visualiza) | ❌ | ❌ |
+| **PO** | ❌ | ✅ só onde tiver `pode_editar=true` | ✅ | ❌ |
+| **Stakeholder** | ❌ | ❌ (só visualiza onde tiver acesso) | ❌ | ❌ |
 
 - **Admin** cria/edita/ativa/desativa contas de **qualquer** perfil.
 - **Manager** cria/edita/ativa/desativa contas **só de PO e Stakeholder** — nunca consegue criar ou mexer numa conta Admin/Manager (checado no banco, não só escondido na tela).
-- Um usuário PO pode estar associado a **mais de um produto**. Isso é feito de dois jeitos, que se equivalem (mexem no mesmo dado):
-  - Em **Produtos → Gerenciar acesso** (por produto): escolhe qual usuário é o PO daquele produto.
-  - Em **Administração de usuários** (por usuário): pra um usuário já com perfil PO, um botão "Produtos" abre a lista de todos os produtos com checkbox — marca/desmarca quais ele é responsável.
-- Criar um usuário como **PO exige marcar pelo menos 1 produto** na hora da criação.
+- **Não existe mais "o PO único" de um produto.** O acesso a um produto é uma associação usuário×produto com um nível (`product_stakeholders.pode_editar`: true=edita, false=só visualiza) — um mesmo usuário pode ter acesso a vários produtos, e um mesmo produto pode ter vários editores ao mesmo tempo. Isso é editado de dois jeitos equivalentes (mexem na mesma tabela):
+  - Em **Produtos → Gerenciar acesso** (por produto): pra cada usuário, escolhe "sem acesso" / "só visualizar" / "editar e visualizar".
+  - Em **Administração de usuários** (por usuário, só pra quem é PO): um botão "Produtos" abre a mesma escolha, produto a produto.
+- Criar um usuário como **PO exige marcar pelo menos 1 produto** na hora da criação (esses produtos já entram com "editar e visualizar").
 
 Não existe "excluir conta" de verdade — isso exigiria a `service_role` key do Supabase, que nunca deve aparecer no código do navegador (ela ignora toda regra de segurança do banco). **Desativar** tem o mesmo efeito na prática: a pessoa é deslogada na hora e não consegue mais entrar até ser reativada.
 

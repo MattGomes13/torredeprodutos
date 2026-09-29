@@ -127,7 +127,12 @@ portal-sistemas/
 Pede "Usuário" e "Senha". Internamente chama `fazerLogin()` (em
 `auth.js`), que traduz o usuário pro e-mail interno e chama
 `supabaseClient.auth.signInWithPassword`. Se já existe sessão ativa,
-pula direto pro `dashboard.html`.
+pula direto pro `dashboard.html`. Layout split-screen (painel escuro à
+esquerda com logo/frase de efeito, formulário limpo à direita, botão
+de mostrar/ocultar senha) — CSS todo escopado dentro do próprio
+arquivo (prefixo `lg-`), não em `assets/css/style.css`, então
+`setup-admin.html` continua com o cartão centralizado simples de
+sempre (nenhum efeito colateral entre os dois).
 
 ### `setup-admin.html` — bootstrap do 1º administrador
 Só funciona **antes de existir qualquer admin** no portal (checa via RPC
@@ -182,10 +187,56 @@ O roadmap completo de **um** produto: KPIs, Gantt, visão
 estratégica/financeira, lista de épicos, filtros, exportar Excel/PPT
 (bibliotecas SheetJS e PptxGenJS embutidas no arquivo), gestão de
 "layers"/tipos com cores, white-label (cores do tema), upload de logo.
-Essa é a parte com mais código (a lógica de negócio do roadmap em si é
-praticamente inalterada de um sistema que já existia rodando localmente
-— só a persistência mudou de `localStorage` pro Supabase).
+Essa é a parte com mais código (~4900 linhas) — a lógica de negócio do
+roadmap em si é praticamente inalterada de um sistema que já existia
+rodando localmente, só a persistência mudou de `localStorage` pro
+Supabase, e várias features foram adicionadas em cima depois.
 
+⚠️ Uma parte do HTML deste arquivo (e de `hub.html`) é um "snapshot"
+literal do DOM — linhas gigantes (50-150KB cada) com estilos inline já
+calculados, sobrescritas no load pelo JS. Nunca leia essas linhas
+inteiras com um editor comum; a lógica de verdade vive em linhas
+normais, uma instrução por linha.
+
+- **Views**: Roadmap (grid por tipo/layer × trimestre), Estratégico
+  (dois modos: "Visão" e "Dashboards" com gráficos SVG), Gantt, Lista,
+  **Lista Backlog** e **🗂 Backlog** (Kanban).
+- **Status** (`STATUS_OPTS`): Finalizado, Em andamento, Planejado,
+  Alocado em Roadmap, Em backlog, Esforço levantado, Impedimento,
+  Atrasado, Pausado.
+- **Isolamento de Backlog**: épicos com status "Em backlog" ou
+  "Impedimento" saem do Roadmap/Gantt/Lista/Estratégico principais e só
+  aparecem nas duas visões dedicadas. Helpers: `isBacklogItem(i)`,
+  `getBacklogItems()`, `applyFilters()` (exclui) vs
+  `applyBacklogFilters()` (só esse conjunto).
+- **Kanban de Backlog**: 5 raias fixas (Backlog geral → Em Estudo e
+  refinamento → Em Discovery → Aguardando aprovação do comitê →
+  Enviado para Delivery). Arrastar um card pra "Enviado para Delivery"
+  muda o status pra "Em andamento" automaticamente, tirando o épico do
+  Backlog.
+- **Previsibilidade** (aba Detalhe do épico): checkbox que revela um
+  radio — "Valor previsto" (com campo R$) ou "Ainda não foi
+  dimensionado". Campos no item: `previsibilidade`,
+  `previsibilidadeDimensionado` (true=tem valor / false=pendente /
+  null=checkbox nem marcado), `previsibilidadeValor`.
+- **Interdependência entre produtos**: marca que um épico depende de
+  outro produto — cria automaticamente um clone (laranja, "🔗 Origem:
+  X") no roadmap do produto escolhido, via as RPCs `security definer`
+  `upsert_dependency_clone`/`remove_dependency_clone` (seção 6.2). Quem
+  declara não precisa ter permissão de editar o produto alvo, só o de
+  origem. O clone é somente-leitura (só pode ser excluído). Ver detalhe
+  completo na seção 6.4.
+- **Divulgar**: checkbox solto (`item.divulgar`), só um lembrete visual
+  (selo 📢), sem lógica nenhuma atrás.
+- **Rascunho de épico novo**: fechar o modal de "Novo Épico" sem salvar
+  guarda o preenchimento num rascunho local (localStorage, por
+  produto); um botão "📝 Rascunho" no cabeçalho reabre de onde parou.
+  Editar um item já existente e cancelar não mexe nesse rascunho.
+- **Clonar épico** (botão no modal de editar): duplica um épico
+  existente (útil pra épicos quase iguais entre bancos/produtos,
+  mudando só um campo). Não herda a interdependência do original.
+- **Selo de BU**: cabeçalho mostra "🏢 <BU>" do produto — só
+  informativo (quem cruza dado entre produtos de uma BU é o Hub).
 - **Nível de acesso** (`ACCESS_LEVEL`): `admin` (admin ou manager,
   edição total), `po` (tem `pode_editar = true` em `product_stakeholders`
   pra este produto — pode ser mais de um usuário ao mesmo tempo, edição
@@ -200,22 +251,51 @@ praticamente inalterada de um sistema que já existia rodando localmente
   já exportado contém, no próprio código-fonte da função de exportar, um
   trecho de texto que também parece com "var DATA=[" — um regex simples
   pode parar no lugar errado.
+- **Reabrir um export localmente** (sem `?product=` na URL, com dados
+  embutidos) entra em "modo offline" (`MODO_OFFLINE=true`): permite
+  editar tudo normalmente (épicos, layers, cores) mas esconde
+  Salvar/Importar/Limpar, que não fazem sentido sem o Supabase do outro
+  lado. É assim que alguém fora do portal recebe, edita e devolve o
+  arquivo pra reimportação.
 - Toda gravação de épicos passa pela RPC `replace_epics()` (substitui a
   lista inteira de uma vez, evitando inconsistência entre um delete e um
   insert separados).
 - Config do roadmap (tipos/layers/tema/logo) fica em `products.config`
   (jsonb), não em colunas separadas.
 
-### `modules/torre-de-produtos/hub.html`
+### `modules/torre-de-produtos/hub.html` — "Torre de Controle"
 Visão consolidada de portfólio. **Não tem upload nem "salvar"** — busca
 `products` + `epics` do Supabase toda vez que a página carrega (função
 `atualizarDados()`), e tem um botão "🔄 Atualizar" pra rebuscar sem
 recarregar a página. O RLS já filtra sozinho quem vê o quê (mesmo
 princípio de `produtos.html`). Permite ocultar/reordenar produtos na
 tela (só nesta sessão, não persiste) e exportar um snapshot `.html` pra
-compartilhar com alguém fora do portal. **Stakeholder é bloqueado** tanto
-na tela (redirecionado) quanto no lado dos dados (RLS de `products`/`epics`
-já não libera nada pra ele fora do que for stakeholder explícito).
+compartilhar com alguém fora do portal (esse export ativa um modo
+"arquivo exportado" via `window.__HUB_SNAPSHOT__` embutido no fim do
+arquivo). **Stakeholder é bloqueado** tanto na tela (redirecionado)
+quanto no lado dos dados (RLS de `products`/`epics` já não libera nada
+pra ele fora do que for stakeholder explícito).
+
+Abas: **Estratégica** (padrão), **Acompanhamento** (atrasados,
+impedimentos, setup de pagamento com cliente esperando), e uma aba por
+produto visível. Dentro de Estratégica, seções colapsáveis, nesta
+ordem: Visão financeira consolidada → Valor mapeado por produto →
+**Valor mapeado por BU** → Comparativo por Produto (5 cards de
+destaque) → **Comparativo por BU** → Distribuição de épicos → Total de
+entregas por mês (por produto) → **Total de entregas por mês (por
+BU)** → Valor entregue por mês (por produto) → **Valor entregue por
+mês (por BU)** → Tabela combinada. As seções "por BU" foram adições
+posteriores (a primeira versão do comparativo por BU tinha virado
+"por Produto"; a volta pra BU veio como seção ADICIONAL, sem remover
+as por-produto). Cards de produto (régua do topo) mostram a BU como
+selo abaixo do nome.
+
+No modo "Dashboards" da aba Estratégica tem também um card
+"Rastreamento Financeiro — Onde Está o Valor do Produto" (pizza
+somando Setup + Recorrente + Sem tipo + **Em Backlog**, olhando TODOS
+os épicos, não só os visíveis nas visões principais) e, no modo
+"Visão", um card "Receita em Backlog" ao lado de Setup/Recorrente
+(quebra por raia do Kanban de Backlog).
 
 ### `supabase/functions/admin-reset-password/index.ts`
 Única Edge Function do projeto. Recebe `user_id` + `new_password`, usa o
@@ -514,12 +594,65 @@ create policy "admin/manager ou editor do produto gerenciam épicos"
 on epics for all
 using ( can_manage() or is_product_editor(product_id) )
 with check ( can_manage() or is_product_editor(product_id) );
+
+-- Interdependência entre produtos (ver seção 6.4 pra explicação
+-- completa): permite quem edita o produto DE ORIGEM criar/remover um
+-- "clone de aviso" no produto ALVO, mesmo sem ter permissão de editar
+-- esse produto alvo diretamente — daí o security definer.
+create or replace function upsert_dependency_clone(p_source_product_id uuid, p_target_product_id uuid, p_source_epic_id text, p_item jsonb)
+returns void language plpgsql security definer as $$
+begin
+  if not (can_manage() or is_product_editor(p_source_product_id)) then
+    raise exception 'sem permissão para declarar dependência a partir deste produto';
+  end if;
+  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
+  insert into epics (product_id, epic_id, item)
+  values (p_target_product_id, p_source_epic_id || '_dep', p_item);
+end;
+$$;
+grant execute on function upsert_dependency_clone(uuid, uuid, text, jsonb) to authenticated;
+
+create or replace function remove_dependency_clone(p_source_product_id uuid, p_target_product_id uuid, p_source_epic_id text)
+returns void language plpgsql security definer as $$
+begin
+  if not (can_manage() or is_product_editor(p_source_product_id)) then
+    raise exception 'sem permissão para remover dependência a partir deste produto';
+  end if;
+  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
+end;
+$$;
+grant execute on function remove_dependency_clone(uuid, uuid, text) to authenticated;
 ```
 
 > A tabela `hubs` (de uma versão antiga, baseada em upload manual) **não
 > é mais necessária** — não inclua ela numa reconstrução do zero.
 
-### 6.3 Edge Function — redefinir senha de outro usuário
+### 6.3 Interdependência entre produtos (aviso cruzado)
+
+Ao editar um épico, é possível marcar que ele depende de outro produto
+do portal. Ao salvar com um produto escolhido, o roadmap chama a RPC
+`upsert_dependency_clone` (seção 6.2), que cria uma cópia do épico no
+produto escolhido, marcada com `item.origemDependencia =
+{produtoId, produtoNome, epicoOrigemId}` — essa cópia aparece lá em
+**laranja**, com o selo "🔗 Origem: <produto de origem>", no Roadmap,
+na Lista e no Kanban. O épico original ganha o selo "🔗 Depende de:
+<produto escolhido>" (`item.dependeDe = {produtoId, produtoNome}`).
+
+Trocar o produto escolhido remove o aviso do produto anterior (RPC
+`remove_dependency_clone`) e cria no novo; desmarcar o checkbox só
+remove. **O clone não é editável** — abrir um clone mostra um banner
+de aviso e desabilita o formulário inteiro (só o botão de excluir
+continua ativo, pro lado que recebeu o aviso poder remover se a
+dependência não existir mais). `epic_id` do clone é sempre
+`<id_do_épico_original>_dep`, o que torna o upsert/delete idempotente
+sem precisar rastrear um id de clone separado.
+
+Ponto de segurança importante: quem declara a dependência só precisa
+poder editar o produto **de origem** — as duas funções são `security
+definer` justamente pra permitir criar/remover o clone no produto
+**alvo** mesmo que quem declarou não tenha `pode_editar` lá.
+
+### 6.4 Edge Function — redefinir senha de outro usuário
 
 Arquivo completo em `supabase/functions/admin-reset-password/index.ts`
 (ver seção 5 acima pro que ela faz). Precisa ser publicada manualmente
@@ -554,7 +687,7 @@ arquivo do projeto original — só com este documento em mãos:
    "Administração" só se `role` for `admin` ou `manager`.
 6. **Criar `admin-usuarios.html`** com a tabela de usuários + formulário
    de criação, seguindo exatamente as regras de permissão da seção 4/6.1.
-7. **Publicar a Edge Function** `admin-reset-password` (seção 6.3) e
+7. **Publicar a Edge Function** `admin-reset-password` (seção 6.4) e
    ligar o botão "Nova senha" em `admin-usuarios.html`.
 8. **Construir o módulo de produtos** (`modules/<nome-do-sistema>/`):
    - `home.html`: menu do módulo.
