@@ -1,0 +1,413 @@
+====================================================================
+CONTEXTO DO PROJETO — Portal de Sistemas / Torre de Produtos
+Gerado em: 2026-09-29
+Use este arquivo para dar contexto completo a uma nova sessão/IA que
+vá continuar este projeto sem ter o histórico da conversa anterior.
+====================================================================
+
+## 1. O QUE É O PROJETO
+
+"Portal de Sistemas" é um portal único (login + perfis de usuário) para
+hospedar vários sistemas internos que hoje existem soltos em arquivos
+HTML separados. Hoje só tem um módulo funcionando de verdade: a
+"Torre de Produtos" (gestão de roadmap de produtos: épicos, Gantt,
+visão financeira, Kanban de backlog, etc.) — é o módulo mais completo
+e onde a maior parte do trabalho recente aconteceu.
+
+Requisitos que guiaram as decisões técnicas:
+- Zero custo de hospedagem → GitHub Pages (site estático).
+- Sem servidor próprio → Supabase (Postgres + Auth) como backend,
+  acessado direto do navegador via chave pública "anon/publishable"
+  (isso é seguro por design: a segurança real está no RLS do banco,
+  não em esconder a chave).
+- Sem build step → HTML/CSS/JS puro (sem framework, sem npm build).
+
+## 2. LINKS
+
+- Repositório: https://github.com/MattGomes13/torredeprodutos
+- Site ao vivo: https://mattgomes13.github.io/torredeprodutos/
+- Dono do GitHub: MattGomes13
+- Supabase project URL: https://ngnpqjocaptjeahseyqv.supabase.co
+  (a anon key pública fica em assets/js/supabaseClient.js — não é
+  segredo, é a chave pública por design)
+
+⚠️ O GitHub Pages cacheia por ~5-10 min depois de um push. Se algo
+parecer "não aplicado" logo após publicar, é quase sempre cache —
+pedir pra dar Ctrl+Shift+R ou testar com ?v=algumacoisa na URL antes
+de assumir que o código está errado.
+
+## 3. ESTRUTURA DE ARQUIVOS
+
+```
+portal-sistemas/
+├── index.html                 → login (tela split-screen, redesenhada)
+├── setup-admin.html            → bootstrap do 1º admin (só funciona
+│                                  antes de existir qualquer admin)
+├── dashboard.html               → hub pós-login (cards dos sistemas)
+├── admin-usuarios.html          → administração de usuários (admin/manager)
+├── assets/
+│   ├── css/style.css            → estilos globais compartilhados
+│   └── js/
+│       ├── supabaseClient.js    → credenciais do Supabase (URL + anon key)
+│       └── auth.js              → fazerLogin, getUsuarioLogado, getPerfil,
+│                                   protegerPagina, initTopbar, handleLogout
+└── modules/torre-de-produtos/
+    ├── home.html                 → escolha entre Hub e Produtos
+    ├── produtos.html             → lista/gestão de produtos + "Gerenciar acesso"
+    ├── hub.html                  → "Torre de Controle": visão consolidada
+    │                                de todos os produtos (grande, ~1700 linhas)
+    └── roadmap.html              → roadmap completo de 1 produto (ENORME,
+                                     ~4900 linhas, tem SheetJS + PptxGenJS
+                                     embutidos pra exportar Excel/PPT)
+README.md                         → guia de setup passo a passo + TODAS as
+                                     migrações SQL já aplicadas (ver seção 7)
+PROJETO-VISAO-GERAL.md            → doc de arquitetura mais antigo — ficou
+                                     DESATUALIZADO (não cobre as features das
+                                     últimas ~15 sessões). Este arquivo que
+                                     você está lendo agora é o resumo atual.
+```
+
+⚠️ IMPORTANTE sobre roadmap.html e hub.html: uma parte do HTML deles
+foi originalmente salva como um "snapshot" literal do DOM (linhas
+gigantes de 50-150KB cada, com estilos inline tipo `style="display:
+none;"` já calculados). Isso é só o corpo estático inicial — é
+sobrescrito no load pelas funções JS (buildTable, atualizarDados etc).
+NUNCA tente ler essas linhas inteiras com um editor/Read normal (estoura
+limite de tokens) — use grep/awk pra achar só o trecho que precisa, ou
+edite via função JS (a lógica real do app vive em linhas normais,
+uma instrução por linha, sem indentação).
+
+## 4. BACKEND (SUPABASE) — MODELO ATUAL
+
+### 4.1 Autenticação e perfis
+- Login por **usuário** (não e-mail): `usuarioParaEmail()` em auth.js
+  transforma "fulano" em "fulano@portal.local" internamente, porque o
+  Supabase Auth só loga por e-mail.
+- Tabela `profiles` (id, role, nome, ativo). Roles: `admin` > `manager`
+  > `po` > `stakeholder`.
+  - admin: tudo, incluindo criar admin/manager.
+  - manager: tudo igual admin, EXCETO criar/editar admin ou manager.
+  - po: edita só os produtos onde tem `pode_editar=true`.
+  - stakeholder: só visualiza Produtos (sem acesso ao Hub).
+- Funções: `is_admin()`, `is_manager()`, `is_stakeholder()`,
+  `can_manage()` (admin ou manager), `set_user_role`, `set_user_ativo`,
+  `admin_count()`, `claim_first_admin()`, `list_users()`.
+- Não existe "excluir conta" de verdade (precisaria da service_role
+  key). "Desativar" faz o mesmo efeito na prática (desloga na hora,
+  checado em `initTopbar()`).
+- Redefinir senha de outro usuário → Edge Function
+  `admin-reset-password` (usa service_role no servidor, nunca no
+  cliente).
+
+### 4.2 Produtos e acesso — MODELO MULTI-PO (mudou recentemente!)
+Não existe mais "o PO único de um produto". O modelo atual é:
+
+```sql
+create table products (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  name text not null,
+  config jsonb not null default '{}'::jsonb,  -- tipos/layers/tema/logo
+  bu text,                                     -- unidade de negócio
+  created_at timestamptz, updated_at timestamptz
+);
+
+create table product_stakeholders (
+  product_id uuid references products(id) on delete cascade,
+  user_id uuid references auth.users on delete cascade,
+  pode_editar boolean not null default false,  -- true=edita, false=só vê
+  primary key (product_id, user_id)
+);
+
+create table epics (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references products(id) on delete cascade,
+  epic_id text,        -- "id" original do épico dentro do roadmap
+  item jsonb not null, -- o épico inteiro (título, status, datas, valor...)
+  created_at timestamptz, updated_at timestamptz
+);
+```
+
+- Um mesmo usuário pode ter `pode_editar=true` em vários produtos.
+- Um mesmo produto pode ter VÁRIOS editores ao mesmo tempo.
+- Funções security definer `is_product_editor(product_id)` e
+  `is_product_member(product_id)` — usadas nas RLS policies de
+  products/product_stakeholders/epics.
+- `replace_epics(p_product_id, p_items)` — substitui TODOS os épicos
+  de um produto de uma vez (evita inconsistência entre delete+insert
+  separados). É a função usada pra salvar o roadmap inteiro.
+- UI: **Produtos → Gerenciar acesso** — uma lista única de usuários,
+  cada um com um `<select>`: "Sem acesso" / "Só visualizar" / "Editar
+  e visualizar". Ali também tem o campo **BU** (texto livre com
+  datalist sugerindo BUs já usadas em outros produtos).
+- `products.po_user_id` (coluna antiga) pode ainda existir no banco
+  mas NÃO é mais lida por nenhuma tela — é só lixo histórico, pode
+  apagar com `alter table products drop column po_user_id;` se quiser.
+
+### 4.3 Interdependência entre produtos (feature mais recente e mais
+### "exótica" do ponto de vista de banco)
+Permite marcar, ao editar um épico, que ele depende de OUTRO produto.
+Isso cria automaticamente um "aviso" — um CLONE do épico — no roadmap
+do produto escolhido, renderizado em laranja com "🔗 Origem: <produto>".
+
+```sql
+create or replace function upsert_dependency_clone(
+  p_source_product_id uuid, p_target_product_id uuid,
+  p_source_epic_id text, p_item jsonb)
+returns void language plpgsql security definer as $$
+begin
+  if not (can_manage() or is_product_editor(p_source_product_id)) then
+    raise exception 'sem permissão para declarar dependência a partir deste produto';
+  end if;
+  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
+  insert into epics (product_id, epic_id, item)
+  values (p_target_product_id, p_source_epic_id || '_dep', p_item);
+end;
+$$;
+
+create or replace function remove_dependency_clone(
+  p_source_product_id uuid, p_target_product_id uuid, p_source_epic_id text)
+returns void language plpgsql security definer as $$
+begin
+  if not (can_manage() or is_product_editor(p_source_product_id)) then
+    raise exception 'sem permissão para remover dependência a partir deste produto';
+  end if;
+  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
+end;
+$$;
+```
+
+Ponto-chave: são `security definer`, então quem declara a dependência
+a partir do PRODUTO DE ORIGEM não precisa ter permissão de editar o
+produto ALVO — só precisa poder editar o produto de origem. É assim
+que "Bankmanager" consegue avisar "Net Finanças" sem virar editor de
+Net Finanças.
+
+No item (épico) em si, os campos usados são:
+- `item.dependeDe = {produtoId, produtoNome}` → no épico ORIGINAL,
+  indica que ele depende de outro produto.
+- `item.origemDependencia = {produtoId, produtoNome, epicoOrigemId}`
+  → só existe no CLONE, indica de onde ele veio.
+- O clone é sempre **somente leitura** na UI (não editável — só
+  excluível pelo botão de excluir normal, do lado de quem recebeu o
+  aviso).
+
+### 4.4 Todas as migrações SQL já documentadas
+O README.md tem, em ordem, TODAS as migrações que precisam ser rodadas
+pra levar um banco do zero até o estado atual (procure por "## Migração"
+no README):
+1. Schema inicial (perfis, hub antigo — hoje não usado, produtos,
+   product_stakeholders, epics) — seção "5.1/5.2/5.3" do README.
+2. "Migração: multi-PO com nível editar/visualizar" — troca
+   `po_user_id` único por `product_stakeholders.pode_editar`.
+3. "Migração: coluna `bu`" — `alter table products add column bu text`.
+4. "Migração: interdependência entre produtos" — as duas funções
+   `upsert_dependency_clone` / `remove_dependency_clone` da seção 4.3
+   acima.
+
+Se for reconstruir do zero num Supabase novo, o README já tem o SQL
+final consolidado (não precisa rodar as migrações incrementais, só
+o schema "fresco"). Se for continuar num banco JÁ EXISTENTE, rodar
+as migrações incrementais na ordem acima (idempotentes, podem rodar
+de novo sem quebrar nada).
+
+## 5. TELA POR TELA (o que cada uma faz hoje)
+
+### index.html — login
+Redesenhado recentemente em split-screen: painel escuro à esquerda
+(logo "Torre de Produtos" + formas decorativas + frase de efeito),
+formulário limpo à direita (Usuário/Senha com botão de mostrar/ocultar
+senha, "Esqueci minha senha" — texto decorativo, nunca foi funcional
+—, botão "Entrar"). CSS todo escopado dentro do próprio arquivo
+(prefixo `lg-`), não tocou em assets/css/style.css — então
+setup-admin.html continua com o cartão centralizado de sempre.
+
+### admin-usuarios.html
+Lista todos os usuários (via `list_users()`), com perfil, status
+(ativo/inativo), último login. Por linha: trocar perfil, ativar/
+desativar, redefinir senha, e — só pra role=po — botão "Produtos" que
+abre um modal listando TODOS os produtos com um `<select>` de nível
+de acesso por produto (mesma lógica do "Gerenciar acesso" de
+produtos.html, só que do ponto de vista do usuário em vez do produto).
+
+### modules/torre-de-produtos/produtos.html
+Lista de produtos (admin/manager veem todos + botão "+ Novo produto"
+e "Gerenciar acesso"; PO/stakeholder veem só os liberados, com uma
+tag indicando se editam ou só visualizam). Cada card mostra a BU
+embaixo do nome, se tiver.
+
+### modules/torre-de-produtos/hub.html — "Torre de Controle"
+Visão consolidada, 100% ao vivo do Supabase (sem upload, sem
+"importar" — foi removido faz tempo). Abas: **Estratégica** (padrão),
+**Acompanhamento**, e uma aba por produto visível.
+
+Dentro de Estratégica, seções colapsáveis nesta ordem:
+1. Visão financeira consolidada (KPIs: total épicos, finalizados, em
+   andamento, atrasado/impedimento, progresso médio, tempo médio de
+   desenvolvimento, valor total mapeado)
+2. Valor mapeado por produto (barras horizontais)
+3. **Valor mapeado por BU** (igual ao de cima, mas agrupado por BU —
+   produto sem BU cai em "Sem BU definida")
+4. Comparativo por Produto (5 cards de destaque: mais épicos, mais
+   finalizados, mais em andamento, mais em atraso, maior faturamento
+   — rótulos completos, ex: "Produto com mais épicos finalizados")
+5. **Comparativo por BU** (os mesmos 5 cards, por BU)
+6. Distribuição de épicos (por produto + status geral)
+7. Total de entregas por mês (colunas empilhadas por produto)
+8. **Total de entregas por mês (por BU)**
+9. Valor entregue por mês (por produto)
+10. **Valor entregue por mês (por BU)**
+11. Tabela combinada de épicos
+
+(As seções em negrito/marcadas "por BU" são adições recentes — foram
+pedidas como ADICIONAIS, nunca substituíram as por-produto.)
+
+Cards de produto (régua do topo) mostram a BU como selo pequeno
+abaixo do nome.
+
+### modules/torre-de-produtos/roadmap.html — o arquivo grande
+Roadmap completo de UM produto. Views (botões no topo):
+- **Roadmap** (grid por tipo/layer × trimestre, "pills")
+- **Estratégico** (dashboards financeiros, dois modos: "Visão" e
+  "Dashboards" com gráficos SVG)
+- **Gantt**
+- **☰ Lista**
+- **📋 Lista Backlog** (NOVA — só épicos com status "Em backlog" ou
+  "Impedimento", isolados das visões acima)
+- **🗂 Backlog** (NOVA — Kanban com 5 raias: Backlog geral → Em Estudo
+  e refinamento → Em Discovery → Aguardando aprovação do comitê →
+  Enviado para Delivery. Arrastar um card pra "Enviado para Delivery"
+  muda o status pra "Em andamento" automaticamente, tirando o épico
+  do Backlog)
+
+Status possíveis hoje (STATUS_OPTS): Finalizado, Em andamento,
+**Planejado** (novo), **Alocado em Roadmap** (novo), Em backlog,
+Esforço levantado, Impedimento, Atrasado, Pausado.
+
+Isolamento de Backlog: épicos com status "Em backlog" ou "Impedimento"
+NÃO aparecem mais no Roadmap/Gantt/Lista/Estratégico principais — só
+nas duas visões de Backlog acima. `isBacklogItem(i)` e
+`getBacklogItems()` são os helpers; `applyFilters()` exclui, e
+`applyBacklogFilters()` é a versão que SÓ pega esse conjunto.
+
+Modal de editar/criar épico — abas Básico / Detalhe / Acompanhamento
+/ JSON. Na aba Detalhe, de cima pra baixo:
+- Prioridade, Módulo, PO, Sprint, Esforço, Origem da Feature
+- Datas (Inicial, Final, Entrega) + Realocação de Datas
+- 💰 Valor Monetário (valor R$ + tipo: Retenção/Setup)
+- 📊 **Previsibilidade** (NOVO): checkbox que revela um radio —
+  "Valor previsto" (com campo R$) OU "Ainda não foi dimensionado".
+  Campos: `item.previsibilidade`, `item.previsibilidadeDimensionado`
+  (true=tem valor, false=pendente, null=checkbox nem marcado),
+  `item.previsibilidadeValor`.
+- 🔗 **Interdependência com outro produto** (NOVO, ver seção 4.3):
+  checkbox + `<select>` de produto. Se o épico ABERTO for ele mesmo
+  um clone/aviso (`origemDependencia` setado), esse bloco vira um
+  banner explicativo e o formulário inteiro fica desabilitado
+  (somente leitura) — só dá pra excluir.
+- 📢 **Divulgar** (NOVO, bem simples): um checkbox solto, "Divulgar
+  este épico quando for entregue" — SÓ um lembrete visual (selo 📢
+  no Roadmap/Lista/Kanban), sem lógica nenhuma atrás.
+- Observações (lista com data + texto)
+
+Outras features do roadmap.html:
+- **Rascunho de épico novo**: se você fecha o modal de "Novo Épico"
+  sem salvar (Cancelar/Fechar/clicar fora), o preenchimento é salvo
+  num rascunho local (localStorage, por produto). Um botão "📝
+  Rascunho" aparece no cabeçalho quando existe um pendente; clicando
+  reabre preenchido. Salvar com sucesso limpa o rascunho. Editar um
+  item JÁ EXISTENTE e cancelar NÃO mexe no rascunho de item novo
+  (são independentes).
+- **Clonar épico** (botão "📋 Clonar" no modal de editar): duplica o
+  épico (útil pra épicos quase iguais entre bancos/produtos diferentes
+  — escreve um, clona, só troca o campo que muda). Clone NÃO herda
+  `dependeDe` (a interdependência não é copiada automaticamente).
+- **Selo de BU**: cabeçalho do roadmap mostra "🏢 <BU>" do produto —
+  só informativo, não cruza dado nenhum entre produtos por aqui (quem
+  faz o cruzamento é o Hub).
+- **Exportar/Importar HTML**: exporta um .html standalone com os dados
+  embutidos (pra alguém editar offline e devolver). Nome do arquivo
+  usa o nome real do produto. Reabrir esse export localmente entra em
+  "modo offline" (`MODO_OFFLINE=true`) — permite editar tudo (add/
+  editar/excluir épico, layers, cores) mas esconde Salvar/Importar/
+  Limpar (não fazem sentido sem Supabase do outro lado).
+- Export Excel (SheetJS) e PPT (PptxGenJS) embutidos no arquivo.
+
+## 6. CONVENÇÕES E ARMADILHAS JÁ CONHECIDAS
+
+- Idioma: tudo em pt-BR (variáveis internas em português também, ex:
+  `podeEditar()`, `salvarRascunho()`).
+- `jsStr()` / `escapeHtml()` / `onclickAttr()`: helpers usados pra
+  montar `onclick="fn(...)"` dentro de atributos HTML sem quebrar por
+  causa de aspas — já causou bug real antes (JSON.stringify usa aspas
+  duplas dentro de atributo já entre aspas duplas). Sempre usar esses
+  helpers ao montar onclick com strings dinâmicas.
+- Segurança: NUNCA a IA deve digitar senha/credencial real em nome do
+  usuário (login não pode ser testado end-to-end por essa restrição —
+  só verificação de "sem erro no console" na página pública).
+- RLS é a fronteira de segurança de verdade — esconder botão na UI é
+  só conveniência, sempre confirmar que a policy no banco também
+  impede.
+- Commits terminam com `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+- Fluxo de verificação usado em toda sessão: como a máquina não tem
+  Python/Node "de verdade" instalado (só stubs da Microsoft Store),
+  os testes locais são feitos subindo um mini servidor HTTP via
+  PowerShell (`System.Net.HttpListener`) apontando pra uma cópia do
+  arquivo num diretório de scratch, injetando dados de teste (pro
+  roadmap.html: um `var DATA=[...]` populado, que ativa o modo
+  offline; pro hub.html: um `window.__HUB_SNAPSHOT__` no fim do
+  arquivo, que ativa o modo "arquivo exportado"). Depois de validar
+  local, publica (git push) e confirma "sem erro no console" na URL
+  pública do GitHub Pages (com um `?v=cachebust` na URL pra furar
+  cache).
+- Arquivos roadmap.html/hub.html são parcialmente um "snapshot" de
+  DOM (linhas gigantes) — ver aviso na seção 3.
+
+## 7. LINHA DO TEMPO RESUMIDA (mais recente primeiro)
+
+1. Flag "Divulgar" no épico (reminder simples, sem lógica).
+2. Interdependência entre produtos (clone laranja cross-produto).
+3. Correção de rótulos cortados no Hub ("...com mais finalizados"
+   → "...com mais épicos finalizados").
+4. Previsibilidade (valor previsto/pendente) + status Planejado e
+   Alocado em Roadmap.
+5. Correção: busca/filtros não funcionavam nas visões de Backlog
+   (Lista Backlog e Kanban).
+6. Rascunho de épico novo ao fechar sem salvar.
+7. Redesign da tela de login (split-screen).
+8. Hub: gráficos de entregas/valor mensais também por BU (adicional).
+9. Hub: totalizadores por BU (Valor mapeado + Comparativo) (adicional).
+10. Migração da coluna `products.bu` documentada.
+11. Produto associado a uma BU (campo com sugestão + selo no Hub e
+    Roadmap) — sem visão consolidada nessa primeira versão (a
+    consolidada veio depois, itens 8-9).
+12. Rastreamento financeiro completo no dashboard da Visão Estratégica
+    (todos os produtos, incluindo o que está em Backlog).
+13. Card "Receita em Backlog" na Visão Estratégica.
+14. Isolamento de Backlog/Impedimento em 2 novas visões (Lista + Kanban).
+15. Acesso multi-PO por produto (nível editar/visualizar por
+    associação produto×usuário) — SUBSTITUIU o modelo antigo de
+    `po_user_id` único.
+16. Clonar épico existente ao editar.
+17. Exportação/reimportação offline do roadmap (edição completa
+    offline, não só visualização).
+18. (Sessões mais antigas, cobertas em PROJETO-VISAO-GERAL.md):
+    scaffold inicial, login, Hub sincronizado automaticamente,
+    perfis PO/Manager completos, redefinição de senha via Edge
+    Function, correções de Gantt/PDF/exportação, gráficos financeiros
+    do Hub, etc.
+
+## 8. O QUE UMA NOVA SESSÃO PRECISA SABER PRA COMEÇAR
+
+1. Ler este arquivo + o README.md (setup e todas as migrações SQL).
+2. NÃO confiar no PROJETO-VISAO-GERAL.md sozinho — está desatualizado
+   desde a migração multi-PO (item 15 da linha do tempo).
+3. Se for mexer no banco, checar antes se a migração relevante (seção
+   4.4) já foi aplicada no Supabase do usuário — ele às vezes esquece
+   de rodar e aparece erro tipo "Could not find the 'x' column" ou
+   RLS negando.
+4. Testar localmente antes de publicar (seção 6) sempre que a mudança
+   for visível/comportamental — nunca só "parece que compila".
+5. Depois de publicar, checar console de erro na URL pública com
+   cache-bust antes de reportar sucesso.
+====================================================================
