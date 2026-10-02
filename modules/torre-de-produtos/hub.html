@@ -348,10 +348,40 @@ tickClock(); setInterval(tickClock,1000);
 // mais "importar", os dados aqui SÃO os dados reais de Produtos, ao vivo.
 // O RLS do banco já filtra sozinho: admin/manager veem todos os produtos,
 // PO só vê o(s) produto(s) dele.
+// ── SEGURANÇA: neutralização de conteúdo vindo do banco (anti-XSS) ──────────
+// Nomes de produto, BU, títulos de épico etc. são escritos por outros
+// usuários e aqui entram como HTML cru (innerHTML), inclusive em atributos
+// e onclick="...". Um editor mal-intencionado poderia gravar um
+// <img onerror=...> e executar código na sessão de quem abrir o Hub (ex: um
+// admin). Por isso tudo que chega do Supabase passa por aqui ANTES de ser
+// usado: troca só os caracteres que permitem "escapar" de um contexto (abrir
+// tag, fechar aspas de atributo/string JS, iniciar entidade HTML) por
+// equivalentes visualmente idênticos. Roda em quem LÊ, então não dá pra
+// burlar escrevendo direto na API. (Mesma lógica de roadmap.html.)
+function neutralizarTexto(s){
+  if(typeof s !== 'string') return s;
+  return s.replace(/&(?=#|[A-Za-z0-9]+;)/g, '＆')
+          .replace(/<(?=[A-Za-z\/!?])/g, '‹')
+          .replace(/"/g, '”').replace(/'/g, '’');
+}
+function neutralizarObjeto(v){
+  if(typeof v === 'string') return neutralizarTexto(v);
+  if(Array.isArray(v)) return v.map(neutralizarObjeto);
+  if(v && typeof v === 'object'){
+    var o = {};
+    Object.keys(v).forEach(function(k){
+      if(k === '__proto__' || k === 'constructor' || k === 'prototype') return;
+      o[neutralizarTexto(k)] = neutralizarObjeto(v[k]);
+    });
+    return o;
+  }
+  return v;
+}
+
 async function atualizarDados(mostrarToast){
   var { data: prods, error } = await supabaseClient.from('products').select('*').order('created_at');
   if(error){ showToast('Erro ao carregar produtos: '+error.message, 'err'); return; }
-  prods = prods || [];
+  prods = neutralizarObjeto(prods || []);
 
   var ids = prods.map(function(p){ return p.id; });
   var epicsByProduct = {};
@@ -359,7 +389,7 @@ async function atualizarDados(mostrarToast){
     var { data: epicRows } = await supabaseClient.from('epics').select('product_id,item').in('product_id', ids);
     (epicRows||[]).forEach(function(r){
       if(!epicsByProduct[r.product_id]) epicsByProduct[r.product_id] = [];
-      epicsByProduct[r.product_id].push(r.item);
+      epicsByProduct[r.product_id].push(neutralizarObjeto(r.item));
     });
   }
 
@@ -370,7 +400,7 @@ async function atualizarDados(mostrarToast){
   var usersMap = {};
   try{
     var { data: users } = await supabaseClient.rpc('list_users');
-    (users||[]).forEach(function(u){ usersMap[u.id] = u.email; });
+    (users||[]).forEach(function(u){ usersMap[u.id] = neutralizarTexto(u.email); });
   }catch(e){ /* sem permissão de listar usuários — sem problema */ }
 
   var editorsByProduct = {};
@@ -387,7 +417,9 @@ async function atualizarDados(mostrarToast){
   prods.forEach(function(p, idx){
     var key = p.id;
     var corSalva = p.config && p.config.theme && p.config.theme.primary;
-    var color = corSalva || (PRODUCTS[key] && PRODUCTS[key].color) || PALETTE[idx % PALETTE.length];
+    // só aceita cor hexadecimal de verdade (vira estilo inline em vários lugares)
+    if(typeof corSalva !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(corSalva)) corSalva = null;
+    var color = corSalva ||(PRODUCTS[key] && PRODUCTS[key].color) || PALETTE[idx % PALETTE.length];
     novoProducts[key] = {
       name: p.name,
       color: color,

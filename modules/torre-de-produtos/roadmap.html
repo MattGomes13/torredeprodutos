@@ -1258,10 +1258,11 @@ if(!imported||imported.length===0){showToast("Arquivo invalido: nao encontrou ep
 var importedTypes=extractObjField(content,'TYPES');
 var importedLayerMeta=extractObjField(content,'LAYER_META');
 var importedLayerOrder=extractField(content,'LAYER_ORDER');
-DATA=imported;
-if(importedTypes)TYPES=importedTypes;
-if(importedLayerMeta)LAYER_META=importedLayerMeta;
-if(importedLayerOrder&&importedLayerOrder.length>0)LAYER_ORDER=importedLayerOrder;
+// arquivo importado é entrada não confiável: neutraliza antes de usar/gravar
+DATA=neutralizarObjeto(imported);
+if(importedTypes)TYPES=neutralizarObjeto(importedTypes);
+if(importedLayerMeta)LAYER_META=neutralizarObjeto(importedLayerMeta);
+if(importedLayerOrder&&importedLayerOrder.length>0)LAYER_ORDER=neutralizarObjeto(importedLayerOrder);
 reconcileTypes();
 var {error}=await supabaseClient.rpc('replace_epics',{p_product_id:CURRENT_PRODUCT.id,p_items:DATA});
 if(error){showToast("Erro ao salvar import no Supabase: "+error.message,"err");return;}
@@ -2620,12 +2621,43 @@ document.getElementById("overlay").className="overlay on";
 // ── INTERDEPENDÊNCIA ENTRE PRODUTOS ──────────────────────────────────────
 // Lista de outros produtos do portal (pra escolher com qual há dependência).
 // Carregada uma vez no início do roadmap; renderForm() só lê o cache.
+// ── SEGURANÇA: neutralização de conteúdo vindo do banco (anti-XSS) ──────────
+// Títulos, descrições, nomes de layer/produto etc. são escritos por outros
+// usuários (e por arquivos importados) e entram em muitos lugares como HTML
+// cru (innerHTML), inclusive dentro de atributos e de onclick="...". Um
+// editor mal-intencionado poderia gravar um <img onerror=...> e executar
+// código na sessão de quem abrir o roadmap depois (ex: um admin). Por isso
+// TODO dado que chega do Supabase (ou de um import) passa por aqui ANTES de
+// ser usado: troca só os caracteres que permitem "escapar" de um contexto
+// (abrir tag, fechar aspas de atributo/string JS, iniciar entidade HTML)
+// por equivalentes visualmente idênticos. Roda em quem LÊ, então não dá
+// pra burlar escrevendo direto na API. Chaves e valores recebem o mesmo
+// tratamento, pra nomes de layer continuarem batendo entre si.
+function neutralizarTexto(s){
+if(typeof s!=="string")return s;
+return s.replace(/&(?=#|[A-Za-z0-9]+;)/g,"＆")
+.replace(/<(?=[A-Za-z\/!?])/g,"‹")
+.replace(/"/g,"”").replace(/'/g,"’");
+}
+function neutralizarObjeto(v){
+if(typeof v==="string")return neutralizarTexto(v);
+if(Array.isArray(v))return v.map(neutralizarObjeto);
+if(v&&typeof v==="object"){
+var o={};
+Object.keys(v).forEach(function(k){
+if(k==="__proto__"||k==="constructor"||k==="prototype")return;
+o[neutralizarTexto(k)]=neutralizarObjeto(v[k]);
+});
+return o;
+}
+return v;
+}
 var OUTROS_PRODUTOS_CACHE=null;
 async function carregarOutrosProdutos(){
 if(!CURRENT_PRODUCT)return;
 try{
 var {data}=await supabaseClient.from('products').select('id,name').neq('id',CURRENT_PRODUCT.id).order('name');
-OUTROS_PRODUTOS_CACHE=data||[];
+OUTROS_PRODUTOS_CACHE=neutralizarObjeto(data||[]);
 }catch(e){OUTROS_PRODUTOS_CACHE=[];}
 }
 function isDependencyClone(item){return !!(item&&item.origemDependencia);}
@@ -3134,6 +3166,7 @@ interdepProdutoNome=achadoInterdep?achadoInterdep.name:null;
 }
 var dependeDepois=(interdepOn&&interdepProdutoId&&interdepProdutoNome)?{produtoId:interdepProdutoId,produtoNome:interdepProdutoNome}:null;
 var dependeAntes=null;
+var idAntes=null; // código do épico antes desta edição (se mudar, o aviso antigo precisa ser removido)
 var divulgar=gChecked("f-divulgar"); // flag simples, só lembrete — sem lógica associada
 if(EDIT_IDX===-1){
 // NEW epic
@@ -3163,6 +3196,7 @@ showToast("Epico adicionado!","ok");
 } else {
 var item=DATA[EDIT_IDX];
 dependeAntes=item.dependeDe||null;
+idAntes=item.id;
 var estavaBacklog=isBacklogItem(item);
 item.id=g("f-id")||item.id;
 item.titulo=g("f-titulo");item.desc=g("f-desc")||"";
@@ -3189,30 +3223,39 @@ showToast("Epico atualizado!","ok");
 var itemSalvo=(EDIT_IDX===-1)?newItem:item; // captura antes do closeEdit resetar EDIT_IDX
 closeEdit(true); // já foi salvo de verdade — não precisa (nem deve) virar rascunho
 buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();refreshBacklogViews();
-saveEdits();
-sincronizarDependencia(itemSalvo,dependeAntes,dependeDepois);
+// o épico precisa já estar gravado no banco ANTES de criar o aviso: o
+// servidor monta o clone a partir da linha gravada (não do que o navegador
+// manda), então espera o salvamento terminar.
+await saveEdits();
+sincronizarDependencia(itemSalvo,dependeAntes,dependeDepois,idAntes);
 }
 // ── INTERDEPENDÊNCIA: cria/atualiza/remove o aviso (clone laranja) no
 // roadmap do outro produto via RPC — funciona mesmo sem ser editor lá,
 // só precisa poder editar ESTE produto (de onde a dependência é
-// declarada). Só mexe em algo se o produto-alvo realmente mudou.
-async function sincronizarDependencia(item,antes,depois){
+// declarada). O servidor monta o clone a partir do épico gravado (só
+// campos não sensíveis; sem valor/observações) e identifica o aviso por
+// produto-de-origem + código do épico — o navegador não manda mais o
+// conteúdo do clone. Enquanto o épico tiver dependência, cada salvamento
+// atualiza o aviso (mantém status/datas em dia).
+async function sincronizarDependencia(item,antes,depois,idAntes){
 if(!CURRENT_PRODUCT)return; // modo offline: sem cross-produto
 var antesId=antes?antes.produtoId:null;
 var depoisId=depois?depois.produtoId:null;
-if(antesId===depoisId)return;
+if(!antesId&&!depoisId)return;
+var idMudou=!!(idAntes&&idAntes!==item.id);
+var mudou=(antesId!==depoisId)||idMudou;
 try{
-if(antesId){
-await supabaseClient.rpc('remove_dependency_clone',{p_source_product_id:CURRENT_PRODUCT.id,p_target_product_id:antesId,p_source_epic_id:item.id});
+// aviso antigo some se o alvo mudou/foi removido OU se o código do épico
+// mudou (senão ficaria um aviso órfão com o código velho)
+if(antesId&&mudou){
+var r1=await supabaseClient.rpc('remove_dependency_clone',{p_source_product_id:CURRENT_PRODUCT.id,p_target_product_id:antesId,p_source_epic_id:idMudou?idAntes:item.id});
+if(r1.error)throw r1.error;
 }
 if(depoisId){
-var clone=JSON.parse(JSON.stringify(item));
-clone.origemDependencia={produtoId:CURRENT_PRODUCT.id,produtoNome:CURRENT_PRODUCT.name,epicoOrigemId:item.id};
-delete clone.dependeDe;
-var {error}=await supabaseClient.rpc('upsert_dependency_clone',{p_source_product_id:CURRENT_PRODUCT.id,p_target_product_id:depoisId,p_source_epic_id:item.id,p_item:clone});
-if(error)throw error;
-showToast("Aviso de dependência enviado pra "+depois.produtoNome,"ok");
-} else if(antesId){
+var r2=await supabaseClient.rpc('upsert_dependency_clone',{p_source_product_id:CURRENT_PRODUCT.id,p_target_product_id:depoisId,p_source_epic_id:item.id});
+if(r2.error)throw r2.error;
+if(mudou)showToast("Aviso de dependência enviado pra "+depois.produtoNome,"ok");
+}else if(antesId){
 showToast("Aviso de dependência removido","ok");
 }
 }catch(e){
@@ -3254,14 +3297,18 @@ document.getElementById("del-overlay").className="overlay on";
 document.getElementById("del-overlay").dataset.idx=idx;
 }
 function closeConfirmDel(){document.getElementById("del-overlay").className="overlay";}
-function execDelete(){
+async function execDelete(){
 var idx=parseInt(document.getElementById("del-overlay").dataset.idx);
-var title=DATA[idx].titulo;
+var removido=DATA[idx];
+var title=removido.titulo;
 DATA.splice(idx,1);
 closeConfirmDel();
 buildKPIs();buildTable();buildLegend();buildSP();updateFilterBar();buildGantt();refreshBacklogViews();
-saveEdits();
 showToast("Epico removido: "+title,"warn");
+await saveEdits();
+// excluiu um épico que tinha dependência: remove o aviso dele no outro
+// produto, pra não ficar um aviso órfão apontando pra algo que não existe
+if(removido.dependeDe)sincronizarDependencia(removido,removido.dependeDe,null,null);
 }
 document.getElementById("overlay").addEventListener("click",function(e){if(e.target===this)closeEdit();});
 document.getElementById("del-overlay").addEventListener("click",function(e){if(e.target===this)closeConfirmDel();});
@@ -4772,7 +4819,7 @@ if(prodErr||!product){
 document.body.innerHTML='<div style="padding:60px;text-align:center;color:#64748b;font-family:Segoe UI,sans-serif">Você não tem acesso a este produto, ou ele não existe. <a href="produtos.html">Voltar aos produtos</a></div>';
 return;
 }
-CURRENT_PRODUCT=product;
+CURRENT_PRODUCT=neutralizarObjeto(product); // nome/BU/config (layers, tema) vêm de outros usuários: neutraliza antes de usar
 carregarOutrosProdutos(); // fire-and-forget — só precisa estar pronto quando abrirem o modal
 var isAdminOuManager=ctx.perfil&&(ctx.perfil.role==='admin'||ctx.perfil.role==='manager');
 if(isAdminOuManager){
@@ -4787,7 +4834,7 @@ ACCESS_LEVEL=(meuAcesso&&meuAcesso.pode_editar)?'po':'view';
 if(ACCESS_LEVEL==='view')document.body.classList.add('view-only');
 
 var {data:epicRows}=await supabaseClient.from('epics').select('item').eq('product_id',productId);
-DATA=(epicRows||[]).map(function(r){return r.item;});
+DATA=(epicRows||[]).map(function(r){return neutralizarObjeto(r.item);}); // conteúdo de outros usuários: neutraliza (anti-XSS)
 
 loadTypes();loadLayerOrder();loadLayerMeta();
 

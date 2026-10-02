@@ -471,54 +471,58 @@ ainda não existe no seu banco (só estava documentada aqui). Rode:
 alter table products add column if not exists bu text;
 ```
 
-### Migração: interdependência entre produtos (aviso cruzado)
+### Migração: interdependência entre produtos (aviso cruzado) + segurança
 
 Permite marcar, ao editar um épico, que ele depende de outro produto —
 isso cria automaticamente um "aviso" (clone laranja, com "Origem: X")
 no roadmap do produto escolhido, mesmo que quem declarou a dependência
-não tenha permissão de editar aquele outro produto diretamente. Rode
-no SQL Editor do Supabase:
+não tenha permissão de editar aquele outro produto diretamente.
 
-```sql
--- Ambas security definer: rodam ignorando RLS do produto ALVO, mas
--- exigem que quem chama possa editar o produto DE ORIGEM (de onde a
--- dependência está sendo declarada) — é assim que Bankmanager consegue
--- avisar Net Finanças sem precisar virar editor de Net Finanças.
-create or replace function upsert_dependency_clone(p_source_product_id uuid, p_target_product_id uuid, p_source_epic_id text, p_item jsonb)
-returns void language plpgsql security definer as $$
-begin
-  if not (can_manage() or is_product_editor(p_source_product_id)) then
-    raise exception 'sem permissão para declarar dependência a partir deste produto';
-  end if;
-  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
-  insert into epics (product_id, epic_id, item)
-  values (p_target_product_id, p_source_epic_id || '_dep', p_item);
-end;
-$$;
-grant execute on function upsert_dependency_clone(uuid, uuid, text, jsonb) to authenticated;
+**Rode o arquivo [`supabase/migrations/2026-10-02-seguranca.sql`](supabase/migrations/2026-10-02-seguranca.sql)
+inteiro no SQL Editor do Supabase** (é idempotente). Ele substitui a
+versão antiga das funções (que recebia o conteúdo do clone do navegador)
+e também faz o "desativar usuário" valer no banco. O que ele faz:
 
-create or replace function remove_dependency_clone(p_source_product_id uuid, p_target_product_id uuid, p_source_epic_id text)
-returns void language plpgsql security definer as $$
-begin
-  if not (can_manage() or is_product_editor(p_source_product_id)) then
-    raise exception 'sem permissão para remover dependência a partir deste produto';
-  end if;
-  delete from epics where product_id = p_target_product_id and epic_id = p_source_epic_id || '_dep';
-end;
-$$;
-grant execute on function remove_dependency_clone(uuid, uuid, text) to authenticated;
-```
+- `is_admin()` / `is_manager()` / `is_product_editor()` / `is_product_member()`
+  passam a exigir `profiles.ativo = true` — usuário desativado perde toda
+  permissão no banco (não só na tela). `is_stakeholder()` não muda de
+  propósito (só é usada pela tabela legada `hubs`).
+- `upsert_dependency_clone(p_source_product_id, p_target_product_id, p_source_epic_id)`
+  (3 argumentos — a versão de 4 argumentos com `p_item jsonb` é **removida**):
+  exige poder editar o produto de ORIGEM, lê o épico gravado no banco e
+  monta o clone no servidor com lista de campos permitidos (sem valor,
+  observações, atividades, equipe). O id do clone é `<épico>@<slug-da-origem>`
+  e a origem (`origemDependencia`) vem do banco, nunca do navegador.
+- `remove_dependency_clone(...)` e a troca do aviso anterior identificam
+  o clone por `origemDependencia.produtoId` + `epicoOrigemId` dentro do
+  próprio item (não pelo código da linha), então continua funcionando
+  mesmo depois que o produto alvo regrava o roadmap inteiro.
+- Faz uma limpeza única dos avisos antigos (zera valor/observações/atividades).
+- Opcional (comentado): `drop table if exists hubs;`.
 
-Como funciona: ao marcar "Interdependência com outro produto" num épico
-e escolher o produto, o roadmap chama `upsert_dependency_clone` — isso
-cria uma cópia do épico no produto escolhido, marcada com
-`origemDependencia` (aparece lá em laranja, com "🔗 Origem: <produto
-de origem>"). O épico original ganha um selo "🔗 Depende de: <produto
-escolhido>". Desmarcar o checkbox (ou trocar o produto) chama
-`remove_dependency_clone` e remove o aviso do produto anterior. O
-clone em si não é editável — só pode ser excluído (pelo botão de
-excluir normal, do lado de quem recebeu o aviso) se a dependência não
+Como funciona na tela: ao marcar "Interdependência com outro produto" num
+épico e escolher o produto, o roadmap chama `upsert_dependency_clone` — isso
+cria o aviso no produto escolhido, marcado com `origemDependencia` (aparece
+em laranja, com "🔗 Origem: <produto de origem>"). O épico original ganha um
+selo "🔗 Depende de: <produto escolhido>". Desmarcar o checkbox (ou trocar
+o produto) chama `remove_dependency_clone` e remove o aviso do produto
+anterior. O clone em si não é editável — só pode ser excluído (pelo botão
+de excluir normal, do lado de quem recebeu o aviso) se a dependência não
 existir mais.
+
+> **Atenção:** o código novo do navegador e a migração precisam ir juntos.
+> Cliente novo + banco antigo (ou o contrário) dá erro ao declarar/remover
+> dependência até as duas pontas estarem atualizadas.
+
+### Proteção contra conteúdo malicioso (XSS)
+
+Textos de épicos/produtos/e-mails vêm do banco e podem ter sido escritos
+por outro usuário (ou direto pela API). Por isso `roadmap.html` e
+`hub.html` passam tudo que chega do banco por `neutralizarTexto` /
+`neutralizarObjeto` **na hora da leitura**: `<` antes de letra vira `‹`,
+aspas viram `”`/`’` e `&` antes de `#`/entidade vira `＆`. Isso vale
+mesmo que alguém grave dado sujo direto na API do Supabase. A cor de tema
+do produto no Hub só é aceita se for hexadecimal (`#rgb`…`#rrggbbaa`).
 
 ## Rodando localmente
 

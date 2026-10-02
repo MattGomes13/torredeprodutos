@@ -224,8 +224,12 @@ normais, uma instrução por linha.
   X") no roadmap do produto escolhido, via as RPCs `security definer`
   `upsert_dependency_clone`/`remove_dependency_clone` (seção 6.2). Quem
   declara não precisa ter permissão de editar o produto alvo, só o de
-  origem. O clone é somente-leitura (só pode ser excluído). Ver detalhe
-  completo na seção 6.4.
+  origem. O clone é somente-leitura (só pode ser excluído). O clone é
+  montado NO SERVIDOR a partir do épico gravado no banco (lista de campos
+  permitidos, sem valor/observações/atividades), com id `<épico>@<slug>`
+  e origem vinda do banco — o navegador não manda o conteúdo do clone.
+  A RPC é `upsert_dependency_clone(origem, alvo, épico)` (3 args). Ver
+  detalhe completo na seção 6.4 e `supabase/migrations/2026-10-02-seguranca.sql`.
 - **Divulgar**: checkbox solto (`item.divulgar`), só um lembrete visual
   (selo 📢), sem lógica nenhuma atrás.
 - **Rascunho de épico novo**: fechar o modal de "Novo Épico" sem salvar
@@ -520,17 +524,27 @@ create table epics (
 -- só pra quebrar a referência circular entre as policies de products e
 -- product_stakeholders (uma pergunta pra outra, que pergunta de volta —
 -- sem essas funções, o Postgres entra em recursão infinita).
+-- ATENÇÃO: as 2 funções só valem pra conta ATIVA (profiles.ativo) — é isso
+-- que faz "desativar usuário" valer no banco e não só na tela. O mesmo vale
+-- pra is_admin()/is_manager() (acrescente "and ativo" na checagem delas).
+-- search_path fixo evita sequestro de função em funções security definer.
 create or replace function is_product_editor(p_product_id uuid)
-returns boolean language sql stable security definer as $$
+returns boolean language sql stable security definer set search_path = public as $$
   select exists(
-    select 1 from product_stakeholders
-    where product_id = p_product_id and user_id = auth.uid() and pode_editar = true
+    select 1 from product_stakeholders ps
+    join profiles pr on pr.id = ps.user_id
+    where ps.product_id = p_product_id and ps.user_id = auth.uid()
+      and ps.pode_editar = true and pr.ativo
   );
 $$;
 
 create or replace function is_product_member(p_product_id uuid)
-returns boolean language sql stable security definer as $$
-  select exists(select 1 from product_stakeholders where product_id = p_product_id and user_id = auth.uid());
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists(
+    select 1 from product_stakeholders ps
+    join profiles pr on pr.id = ps.user_id
+    where ps.product_id = p_product_id and ps.user_id = auth.uid() and pr.ativo
+  );
 $$;
 
 -- substitui de uma vez todos os épicos de um produto (usado ao salvar/importar

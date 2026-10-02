@@ -221,7 +221,7 @@ async function carregarUsuarios(){
           : '<button disabled title="Sem permissão para gerenciar este usuário">Nova senha</button>');
 
     return '<tr id="row-'+u.id+'">'+
-      '<td>'+u.email+(souEu?' <span style="color:var(--dim);font-size:10px">(você)</span>':'')+'</td>'+
+      '<td>'+escapeHtml(u.email)+(souEu?' <span style="color:var(--dim);font-size:10px">(você)</span>':'')+'</td>'+
       '<td>'+roleCell+'</td>'+
       '<td><span class="status-badge '+(ativo?'ativo':'inativo')+'">'+(ativo?'ativo':'inativo')+'</span></td>'+
       '<td style="color:var(--muted)">'+formatarData(u.ultimo_login)+'</td>'+

@@ -56,7 +56,12 @@ Deno.serve(async (req) => {
       return jsonOk({ ok: false, error: 'Você não pode redefinir a própria senha por aqui.' });
     }
 
-    const { data: callerProfile } = await supabaseUser.from('profiles').select('role').eq('id', caller.id).single();
+    const { data: callerProfile } = await supabaseUser.from('profiles').select('role, ativo').eq('id', caller.id).single();
+    // Conta desativada não pode fazer nada aqui, mesmo que o token dela
+    // ainda seja válido (desativar tem que valer no servidor, não só na tela).
+    if (callerProfile?.ativo === false) {
+      return jsonOk({ ok: false, error: 'Conta desativada.' });
+    }
     const callerRole = callerProfile?.role || 'stakeholder';
 
     // Cliente com a service_role key — só usado DEPOIS de confirmar a permissão acima.

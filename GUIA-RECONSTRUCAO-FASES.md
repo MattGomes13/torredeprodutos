@@ -194,6 +194,11 @@ Nunca implemente exclusão física de usuário pela UI comum (evita
 precisar de uma chave/permissão de administrador do banco exposta em
 qualquer lugar arriscado). `ativo=false` tem o mesmo efeito prático:
 checar esse campo em toda tela protegida e deslogar/bloquear na hora.
+**E, principalmente, no servidor:** a checagem de `ativo` tem que estar
+dentro das funções/regras de permissão do banco (is_admin, is_manager,
+is_editor_do_produto, is_membro_do_produto — todas exigem ativo=true) e na
+função de servidor que troca senha. Só esconder na tela não adianta:
+quem foi desativado ainda consegue logar e chamar a API direto.
 
 ### 2.5 Substituir a senha de OUTRA pessoa exige um passo privilegiado
 Trocar a senha de outra pessoa (não a própria) é a única ação que
@@ -905,7 +910,10 @@ só no épico ORIGINAL. origemDependencia (objeto {produtoId,
 produtoNome, epicoOrigemId} ou nulo) — só nos CLONES (avisos).
 
 Crie uma função "criar_ou_atualizar_aviso_dependencia(produto_origem_
-id, produto_alvo_id, epico_origem_id, dados_do_epico)" que:
+id, produto_alvo_id, epico_origem_id)" — repare: NÃO recebe o conteúdo
+do clone. Ela mesma lê o épico de origem que já está gravado no banco e
+monta o clone no servidor; senão qualquer usuário forjaria um épico
+arbitrário no roadmap de outro produto. Ela:
 - Só executa se quem chamou tiver permissão de EDITAR o produto de
   ORIGEM (é_editor_do_produto(produto_origem_id) ou pode_gerenciar())
   — repare que a checagem é sobre o produto de ORIGEM, não o alvo.
@@ -913,13 +921,22 @@ id, produto_alvo_id, epico_origem_id, dados_do_epico)" que:
   produto ALVO mesmo que quem chamou não tenha acesso de edição lá —
   essa é a exceção deliberada: quem declara a dependência não precisa
   ser editor do outro produto, só do seu próprio.
+- Monta o clone com uma LISTA DE CAMPOS PERMITIDOS (título, descrição,
+  status, datas, quarter, progresso…) e deixa de fora tudo que é
+  sensível ou interno do produto de origem: valor financeiro,
+  observações, atividades, equipe, PO. Quem recebe o aviso pode nem ter
+  acesso ao produto de origem.
+- O campo "origemDependencia" (produto de origem, nome, épico) é
+  preenchido pelo servidor com dados do banco — nunca aceito do cliente.
 - Apaga qualquer aviso anterior pra esse mesmo épico de origem naquele
-  produto alvo (evita duplicar se rodar de novo), e insere o clone
-  novo, marcado com origemDependencia preenchido.
-- Sugestão de identificação do clone: usar um id derivado e
-  determinístico (ex: "<id_do_epico_original>_dep") — assim
-  apagar/recriar fica simples sem precisar guardar um mapeamento à
-  parte.
+  produto alvo e insere o novo. IDENTIFIQUE o aviso pelo CONTEÚDO
+  (origemDependencia.produtoId + epicoOrigemId dentro do próprio item),
+  e dê ao clone um id único por origem (ex: "<épico>@<slug-do-produto-
+  de-origem>"). Não use só "<épico>_dep": dois produtos com épicos de
+  mesmo código se sobrescreveriam, e quando o produto alvo regrava o
+  roadmap inteiro o id da linha pode ser reescrito a partir do JSON,
+  deixando o aviso impossível de achar/remover.
+- Fixe o "search_path" (ou equivalente) da função privilegiada.
 
 Crie uma função irmã "remover_aviso_dependencia(produto_origem_id,
 produto_alvo_id, epico_origem_id)" com a MESMA regra de permissão
@@ -936,6 +953,27 @@ novo — nessa ordem, e só se o alvo realmente mudou (não dispare as 2
 chamadas à toa se nada mudou). Ao desmarcar o checkbox de
 interdependência (sem trocar de alvo, só removendo), chame só a
 função de remover.
+
+IMPORTANTE: salve o roadmap do produto de origem ANTES de chamar a
+função de criar/atualizar (ela lê o épico gravado no banco). Se o código
+do épico mudou na edição, remova o aviso pelo código ANTIGO e crie de
+novo pelo novo. Verifique o erro de retorno das DUAS chamadas e mostre
+aviso na tela se falharem. Ao excluir um épico que tinha dependência,
+chame a função de remover também.
+```
+
+🔒 **Regra transversal — conteúdo vindo do banco é não confiável**
+```
+Títulos, descrições, nomes de produto e e-mails vêm do banco e podem ter
+sido escritos por outro usuário (ou direto pela API, sem passar pela sua
+tela). Nunca injete esse texto como HTML sem escapar. Além de escapar na
+renderização, neutralize na LEITURA (ao carregar do banco, antes de
+qualquer tela usar): troque "<" seguido de letra, aspas e "&" seguido de
+"#"/entidade por caracteres visualmente parecidos e inofensivos —
+recursivamente em strings, arrays e objetos (inclusive nas chaves). Como
+isso roda no navegador de quem lê, não dá pra burlar gravando direto na
+API. Cores/valores usados em atributos de estilo: aceite só formato
+estrito (ex: hexadecimal), senão use um padrão.
 ```
 
 🖥️ **Prompt — Frontend (parte 1): Declarar a dependência**
