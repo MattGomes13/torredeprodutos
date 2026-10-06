@@ -280,7 +280,15 @@ arquivo). **Stakeholder é bloqueado** tanto na tela (redirecionado)
 quanto no lado dos dados (RLS de `products`/`epics` já não libera nada
 pra ele fora do que for stakeholder explícito).
 
-Abas: **Estratégica** (padrão), **Acompanhamento** (atrasados,
+Aba **Financeira**: mostra, por BU e por produto, quais épicos geram
+receita (regra: `valor` mapeado > 0) e quais não geram — barra de % de
+épicos que geram receita, contagem, valor individual de cada épico e
+soma do grupo; cards de topo com valor total, % geral, valor médio e
+quebra por tipo de receita (Retenção / Setup / sem tipo). Cada linha
+abre (`<details>`) com as duas listas. Clones de interdependência
+(`origemDependencia`) ficam fora dessa aba.
+
+Abas: **Estratégica** (padrão), **Financeira**, **Acompanhamento** (atrasados,
 impedimentos, setup de pagamento com cliente esperando), e uma aba por
 produto visível. Dentro de Estratégica, seções colapsáveis, nesta
 ordem: Visão financeira consolidada → Valor mapeado por produto →

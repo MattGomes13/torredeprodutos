@@ -210,6 +210,45 @@ tbody tr:hover{background:#f8fafc}
 .setup-cfg label{font-size:10.5px;color:var(--muted);font-weight:700;white-space:nowrap}
 .setup-cfg input{flex:1;background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11.5px;font-family:inherit;color:var(--text)}
 
+/* ============ VISÃO FINANCEIRA ============ */
+.fin-note{font-size:11.5px;color:var(--muted);line-height:1.6;margin:-6px 0 16px;max-width:760px}
+.fin-note b{color:var(--text)}
+.fin-grp{background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--c,var(--navy));border-radius:12px;margin-bottom:10px;box-shadow:var(--sh);overflow:hidden}
+.fin-grp>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:minmax(140px,1.1fr) 2fr 120px 140px;gap:14px;align-items:center;padding:12px 16px;user-select:none}
+.fin-grp>summary::-webkit-details-marker{display:none}
+.fin-grp>summary:hover{background:var(--bg3)}
+.fin-grp[open]>summary{border-bottom:1px solid var(--border)}
+.fin-nm{font-size:13px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:6px;min-width:0}
+.fin-nm .fin-car{color:var(--dim);font-size:11px;transition:.15s;flex-shrink:0}
+.fin-grp[open] .fin-car{transform:rotate(90deg)}
+.fin-nm span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fin-sub{font-size:10px;color:var(--dim);font-weight:500;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fin-bar{height:10px;border-radius:5px;background:var(--bg4);overflow:hidden}
+.fin-bar>div{height:100%;background:#059669;border-radius:5px}
+.fin-bar-lbl{font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+.fin-cnt{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
+.fin-cnt b{color:var(--text)}
+.fin-val{font-family:var(--mono);font-size:13px;font-weight:700;color:#059669;text-align:right}
+.fin-body{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px}
+.fin-col h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px}
+.fin-col.sim h4{color:#059669}
+.fin-col.nao h4{color:var(--muted)}
+.fin-col table{width:100%;border-collapse:collapse;font-size:11px}
+.fin-col th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--dim);padding:5px 6px;border-bottom:1px solid var(--border)}
+.fin-col td{padding:6px;border-bottom:1px solid var(--bg4);vertical-align:top;color:var(--text)}
+.fin-col td.n{font-family:var(--mono);text-align:right;white-space:nowrap;font-weight:700}
+.fin-col th.n{text-align:right}
+.fin-col td.id{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+.fin-col .fin-st{font-size:9.5px;font-weight:700;border-radius:5px;padding:1px 6px;white-space:nowrap}
+.fin-col tfoot td{font-weight:800;border-top:1.5px solid var(--border);border-bottom:none}
+.fin-empty{font-size:11px;color:var(--dim);padding:10px 0}
+.fin-tot{display:grid;grid-template-columns:minmax(140px,1.1fr) 2fr 120px 140px;gap:14px;align-items:center;padding:12px 16px;margin-top:6px;border-top:1.5px solid var(--border)}
+.fin-tot .fin-nm{color:var(--navy);font-size:11px;letter-spacing:.3px}
+@media(max-width:900px){
+  .fin-body{grid-template-columns:1fr}
+  .fin-grp>summary,.fin-tot{grid-template-columns:1fr 1fr}
+}
+
 /* ============ EMPTY STATE ============ */
 .empty-state{text-align:center;padding:70px 20px;color:var(--dim)}
 .empty-state .ic{font-size:36px;margin-bottom:14px;opacity:.5}
@@ -316,7 +355,7 @@ var PRODUCT_ORDER = []; // array of keys, controls display order (drag to reorde
 var SORT = {col:'quarter', dir:1};
 var SEARCH = '';
 var FILTER_PRODUCT = 'all';
-var VIEW = 'estrategica'; // 'estrategica' | 'acompanhamento' | product key
+var VIEW = 'estrategica'; // 'estrategica' | 'financeira' | 'acompanhamento' | product key
 var SETUP_KEYWORD = 'setup de pagamento';
 var DRAG_KEY = null;
 
@@ -585,6 +624,8 @@ function renderTabs(){
   var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
   var html = '<button class="tab'+(VIEW==='estrategica'?' on':'')+'" onclick="setView(\'estrategica\')">'+
     '<span class="tab-ic">◆</span> Estratégica</button>'+
+    '<button class="tab'+(VIEW==='financeira'?' on':'')+'" style="--tc:#059669" onclick="setView(\'financeira\')">'+
+    '<span class="tab-ic" style="color:#059669">$</span> Financeira</button>'+
     '<button class="tab'+(VIEW==='acompanhamento'?' on':'')+'" style="--tc:#dc2626" onclick="setView(\'acompanhamento\')">'+
     '<span class="tab-ic" style="color:#dc2626">▲</span> Acompanhamento</button>';
   keys.forEach(function(k){
@@ -641,7 +682,7 @@ function render(){
   document.getElementById('subtxt').textContent = Object.keys(PRODUCTS).length+' produto(s) · '+visibleKeys.length+' visível(is) no painel';
 
   // Fall back to estratégica if the view points to a hidden/removed product
-  if(VIEW !== 'estrategica' && VIEW !== 'acompanhamento' && visibleKeys.indexOf(VIEW) === -1) VIEW = 'estrategica';
+  if(VIEW !== 'estrategica' && VIEW !== 'financeira' && VIEW !== 'acompanhamento' && visibleKeys.indexOf(VIEW) === -1) VIEW = 'estrategica';
 
   var tabsHtml = '<div class="tabs" id="tabsRow">'+renderTabs()+'</div>';
 
@@ -656,6 +697,8 @@ function render(){
 
   if(VIEW === 'estrategica'){
     renderEstrategica(area, tabsHtml, visibleKeys);
+  } else if(VIEW === 'financeira'){
+    renderFinanceira(area, tabsHtml);
   } else if(VIEW === 'acompanhamento'){
     renderAcompanhamento(area, tabsHtml);
   } else {
@@ -747,6 +790,138 @@ function renderProdutoIndividual(area, tabsHtml, key){
   renderByLayer(key);
   renderByStatus(all);
   renderTableForProduct(key);
+}
+
+/* ============================================================
+   RENDER: FINANCEIRA — quais épicos geram receita e quais não geram,
+   por BU e por produto, com % e valor (individual e somado).
+   Regra: "gera receita" = valor mapeado > 0 no épico. Os avisos de
+   interdependência (clones laranja, com origemDependencia) ficam de
+   fora: o épico verdadeiro já é contado no produto de origem.
+   ============================================================ */
+var FIN_TIPOS = ['Retenção','Setup / Desenvolvimento'];
+
+function finNum(e){
+  var v = parseFloat(e.valor);
+  return isNaN(v) ? 0 : v;
+}
+function finEpicosDoProduto(p){
+  return p.data.filter(function(e){ return !e.origemDependencia; }).map(function(e){
+    return {id:e.id||'—', titulo:e.titulo||'(sem título)', status:e.status||'—',
+      tipoValor:e.tipoValor||'—', valor:finNum(e), produto:p.name};
+  });
+}
+// Junta uma lista de épicos num "grupo" (uma BU, um produto ou o portfólio todo)
+function finGrupo(nome, color, sub, epicos){
+  var gera = epicos.filter(function(e){ return e.valor > 0; })
+    .sort(function(a,b){ return b.valor - a.valor; });
+  var nao = epicos.filter(function(e){ return !(e.valor > 0); });
+  var valor = gera.reduce(function(s,e){ return s+e.valor; }, 0);
+  return {nome:nome, color:color, sub:sub, epicos:epicos, gera:gera, nao:nao,
+    valor:valor, pct: epicos.length ? Math.round(gera.length/epicos.length*100) : 0};
+}
+function finStatusPill(st){
+  var c = STATUS_COLORS[st] || '#64748b';
+  return '<span class="fin-st" style="background:'+c+'22;color:'+c+'">'+st+'</span>';
+}
+function finTabela(lista, comValor, mostrarProduto){
+  if(!lista.length) return '<div class="fin-empty">Nenhum épico nesta categoria.</div>';
+  var head = '<th>ID</th><th>Épico</th>'+(mostrarProduto?'<th>Produto</th>':'')+'<th>Status</th>'+
+    (comValor?'<th>Tipo</th><th class="n">Valor</th>':'');
+  var rows = lista.map(function(e){
+    return '<tr><td class="id">'+e.id+'</td><td>'+e.titulo+'</td>'+
+      (mostrarProduto?'<td>'+e.produto+'</td>':'')+
+      '<td>'+finStatusPill(e.status)+'</td>'+
+      (comValor?'<td>'+(e.tipoValor!=='—'?e.tipoValor:'<span style="color:var(--dim)">—</span>')+'</td><td class="n">'+fmtBRL(e.valor)+'</td>':'')+
+    '</tr>';
+  }).join('');
+  var foot = '';
+  if(comValor){
+    var soma = lista.reduce(function(s,e){ return s+e.valor; }, 0);
+    foot = '<tfoot><tr><td colspan="'+(3+(mostrarProduto?1:0))+'">Soma</td><td class="n" colspan="2">'+fmtBRL(soma)+'</td></tr></tfoot>';
+  }
+  return '<table><thead><tr>'+head+'</tr></thead><tbody>'+rows+'</tbody>'+foot+'</table>';
+}
+function finLinhaResumo(g, aberta){
+  return '<div class="fin-nm"><span class="fin-car">'+(aberta?'':'▶')+'</span><div style="min-width:0"><div class="t" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+g.nome+'</div>'+
+      (g.sub?'<div class="fin-sub" title="'+g.sub+'">'+g.sub+'</div>':'')+'</div></div>'+
+    '<div><div class="fin-bar"><div style="width:'+g.pct+'%"></div></div>'+
+      '<div class="fin-bar-lbl">'+g.pct+'% dos épicos geram receita</div></div>'+
+    '<div class="fin-cnt"><b>'+g.gera.length+'</b> com · <b>'+g.nao.length+'</b> sem<br>de '+g.epicos.length+' épicos</div>'+
+    '<div class="fin-val">'+fmtBRL(g.valor)+'</div>';
+}
+function finGrupoHtml(g, mostrarProduto){
+  return '<details class="fin-grp" style="--c:'+g.color+'">'+
+    '<summary>'+finLinhaResumo(g, false)+'</summary>'+
+    '<div class="fin-body">'+
+      '<div class="fin-col sim"><h4><span>💰 Geram receita ('+g.gera.length+')</span><span>'+fmtBRL(g.valor)+'</span></h4>'+finTabela(g.gera, true, mostrarProduto)+'</div>'+
+      '<div class="fin-col nao"><h4><span>Não geram receita ('+g.nao.length+')</span><span>R$ 0</span></h4>'+finTabela(g.nao, false, mostrarProduto)+'</div>'+
+    '</div>'+
+  '</details>';
+}
+function finTotalHtml(g){
+  return '<div class="fin-tot"><div class="fin-nm">TOTAL DO PORTFÓLIO</div>'+
+    '<div><div class="fin-bar"><div style="width:'+g.pct+'%"></div></div><div class="fin-bar-lbl">'+g.pct+'% dos épicos geram receita</div></div>'+
+    '<div class="fin-cnt"><b>'+g.gera.length+'</b> com · <b>'+g.nao.length+'</b> sem<br>de '+g.epicos.length+' épicos</div>'+
+    '<div class="fin-val" style="color:var(--navy);font-size:15px">'+fmtBRL(g.valor)+'</div></div>';
+}
+function finGruposPorBU(keys){
+  var mapa = {}, ordem = [];
+  keys.forEach(function(k){
+    var p = PRODUCTS[k];
+    var bu = (p.bu && p.bu.trim()) || 'Sem BU definida';
+    if(!mapa[bu]){ mapa[bu] = {color:p.color, produtos:[], epicos:[]}; ordem.push(bu); }
+    mapa[bu].produtos.push(p.name);
+    mapa[bu].epicos = mapa[bu].epicos.concat(finEpicosDoProduto(p));
+  });
+  return ordem.map(function(bu){
+    return finGrupo(bu, mapa[bu].color, mapa[bu].produtos.join(', '), mapa[bu].epicos);
+  });
+}
+function renderFinanceira(area, tabsHtml){
+  var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
+  var porProduto = keys.map(function(k){
+    var p = PRODUCTS[k];
+    return finGrupo(p.name, p.color, (p.bu && p.bu.trim()) || 'Sem BU definida', finEpicosDoProduto(p));
+  });
+  var porBU = finGruposPorBU(keys);
+  var todos = [];
+  porProduto.forEach(function(g){ todos = todos.concat(g.epicos); });
+  var geral = finGrupo('Portfólio', '#059669', '', todos);
+
+  // quebra do valor pelo "tipo de receita" do épico (Retenção / Setup / sem tipo)
+  var porTipo = {'Retenção':0, 'Setup / Desenvolvimento':0, 'Sem tipo definido':0};
+  geral.gera.forEach(function(e){
+    var t = FIN_TIPOS.indexOf(e.tipoValor) > -1 ? e.tipoValor : 'Sem tipo definido';
+    porTipo[t] += e.valor;
+  });
+  var ticket = geral.gera.length ? geral.valor/geral.gera.length : 0;
+
+  var cards = [
+    {lbl:'Valor total mapeado', val:fmtBRL(geral.valor), sub:'soma dos épicos que geram receita', c:'#059669'},
+    {lbl:'Épicos que geram receita', val:geral.gera.length, sub:'de '+geral.epicos.length+' épicos', c:'#2563eb'},
+    {lbl:'Épicos sem receita', val:geral.nao.length, sub:'valor mapeado = R$ 0', c:'#64748b'},
+    {lbl:'% que geram receita', val:geral.pct+'%', sub:'dos épicos do portfólio', c:'#7c3aed'},
+    {lbl:'Valor médio por épico', val:fmtBRL(ticket), sub:'só dos que geram receita', c:'#d97706'},
+    {lbl:'Retenção', val:fmtBRL(porTipo['Retenção']), sub:'tipo de receita', c:'#0891b2'},
+    {lbl:'Setup / Desenvolvimento', val:fmtBRL(porTipo['Setup / Desenvolvimento']), sub:'tipo de receita', c:'#2563eb'},
+    {lbl:'Sem tipo definido', val:fmtBRL(porTipo['Sem tipo definido']), sub:'tem valor mas sem tipo', c:'#94a3b8'}
+  ];
+  var cardsHtml = cards.map(function(c){
+    return '<div class="tot" style="--c:'+c.c+'"><div class="tot-lbl">'+c.lbl+'</div><div class="tot-val">'+c.val+'</div><div class="tot-sub">'+c.sub+'</div></div>';
+  }).join('');
+
+  var vazio = '<div class="watch-empty"><b>Nada para mostrar</b> — nenhum épico encontrado.</div>';
+  area.innerHTML = tabsHtml +
+    '<p class="fin-note">Um épico <b>gera receita</b> quando tem <b>valor mapeado maior que zero</b> no roadmap. '+
+      'Clique numa linha para abrir os épicos (com o valor de cada um e a soma). '+
+      'Os avisos de interdependência (laranja) não entram aqui — o épico original já é contado no produto de origem.</p>'+
+    secaoColapsavel('fin-resumo', 'Visão financeira', '<span class="cnt">'+keys.length+' produtos</span>',
+      '<div class="totals">'+cardsHtml+'</div>') +
+    secaoColapsavel('fin-bu', 'Receita por BU', '<span class="cnt">'+porBU.length+' BU(s)</span>',
+      (porBU.length ? porBU.map(function(g){ return finGrupoHtml(g, true); }).join('')+finTotalHtml(geral) : vazio)) +
+    secaoColapsavel('fin-produto', 'Receita por produto', '<span class="cnt">'+porProduto.length+' produto(s)</span>',
+      (porProduto.length ? porProduto.map(function(g){ return finGrupoHtml(g, false); }).join('')+finTotalHtml(geral) : vazio));
 }
 
 /* ============================================================
