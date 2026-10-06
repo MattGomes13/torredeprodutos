@@ -124,6 +124,7 @@ linhas com `pode_editar=true` (vários editores ao mesmo tempo).
 | dependeDe | `{produtoId, produtoNome}` \| null | Fase 9 | |
 | origemDependencia | `{produtoId, produtoNome, epicoOrigemId}` \| null | Fase 9 | só em clones (ver Fase 9) |
 | divulgar | boolean | Fase 8 | flag simples, sem lógica |
+| objetivo | texto livre (≤200) | Fase 8 | agrupa épicos na visão "Objetivos"; vazio = sem objetivo |
 | faseBacklog | enum | Fase 7 | `geral`\|`estudo`\|`discovery`\|`comite`\|`delivery` — só relevante quando `status` é backlog/impedimento |
 | observacoes | lista de `{data, texto}` | não | |
 | atividades | lista de objetos | não | usado no cálculo automático de `prog` (Fase 3) |
@@ -882,6 +883,34 @@ cria uma cópia idêntica com um novo id (mantendo tudo igual — título,
 status, etc.), e abre o formulário de edição JÁ NA CÓPIA, pronta pra
 ajustar o que for diferente (o caso de uso é épicos quase idênticos
 entre bancos/clientes diferentes, mudando só um campo).
+```
+
+🖥️ **Prompt — Frontend (recurso extra): Objetivo + visão por Objetivo**
+```
+Na aba Detalhe do formulário do épico, adicione o campo "Objetivo":
+texto LIVRE (até 200 caracteres), opcional, com sugestões (autocomplete)
+dos objetivos já usados em outros épicos do produto — mas o usuário pode
+digitar qualquer coisa. Ao salvar, normalize espaços (trim e espaços
+repetidos viram um só). Guarde em Epic.objetivo. Inclua o campo no
+rascunho de épico novo e na busca global. NÃO copie o objetivo para os
+avisos de interdependência (clones) — eles são montados no servidor.
+
+Crie uma nova visão no roadmap (botão ao lado das demais): "Objetivos".
+Ela agrupa os épicos pelo texto do objetivo, ignorando diferença de
+maiúscula/minúscula e espaços repetidos (o nome exibido é o da primeira
+grafia encontrada), em ordem alfabética, e coloca no fim o grupo "Sem
+objetivo definido" (fechado por padrão). Cada grupo é um bloco que abre e
+fecha (o estado aberto/fechado sobrevive a redesenhos) e mostra no
+cabeçalho: nome do objetivo, quantos finalizados de quantos, progresso
+médio (barra + %), nº de épicos e valor SOMADO. Dentro do bloco, uma
+linha por épico (ordenada pelo maior valor) com ID, título (+ produto),
+status, barra de progresso com % e valor individual; clicar na linha
+abre o épico pra edição. No topo, 4 cards: nº de objetivos, épicos com
+objetivo, épicos sem objetivo e valor total. Entram TODOS os épicos
+(inclusive os de backlog) menos os clones de interdependência; os
+filtros e a busca do topo valem nessa visão, e ela se atualiza sozinha
+depois de criar/editar/excluir um épico. Mostre também uma etiqueta
+"🎯 objetivo" nas linhas da Lista.
 ```
 
 ✅ **Critério de pronto**: testar cada um dos 4 recursos isoladamente

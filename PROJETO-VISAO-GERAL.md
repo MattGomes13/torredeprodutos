@@ -230,6 +230,13 @@ normais, uma instrução por linha.
   e origem vinda do banco — o navegador não manda o conteúdo do clone.
   A RPC é `upsert_dependency_clone(origem, alvo, épico)` (3 args). Ver
   detalhe completo na seção 6.4 e `supabase/migrations/2026-10-02-seguranca.sql`.
+- **Objetivo** (`item.objetivo`, aba Detalhe): texto livre (≤200), com
+  autocomplete dos já usados. A visão **🎯 Objetivos** (botão ao lado de
+  Backlog) agrupa os épicos pelo texto (sem diferenciar maiúscula/espaços),
+  mostrando por objetivo: finalizados/total, progresso médio, nº de épicos,
+  valor somado e, por épico, status, % e valor. Grupo "Sem objetivo
+  definido" no fim. Inclui épicos de backlog; exclui clones de
+  interdependência. Sem mudança de banco (vive no JSON do épico).
 - **Divulgar**: checkbox solto (`item.divulgar`), só um lembrete visual
   (selo 📢), sem lógica nenhuma atrás.
 - **Rascunho de épico novo**: fechar o modal de "Novo Épico" sem salvar
