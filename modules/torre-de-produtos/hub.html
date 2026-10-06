@@ -103,6 +103,16 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.5px;color:#fff}
 .tab.on{color:var(--tc,var(--navy));border-bottom-color:var(--tc,var(--navy))}
 .tab-ic{color:#2563eb}
 .tab-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+/* grupo "Relatórios": as 2 visões consolidadas ficam em destaque, sob um rótulo */
+.tabs{align-items:flex-end}
+.tab-grp{display:flex;flex-direction:column;gap:5px;margin-bottom:6px}
+.tab-grp-lbl{font-size:9.5px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);padding-left:4px}
+.tab-grp-btns{display:flex;gap:8px;flex-wrap:wrap}
+.tab.tab-rel{font-size:13px;font-weight:800;padding:9px 18px;margin-bottom:0;background:var(--bg2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);box-shadow:var(--sh)}
+.tab.tab-rel:hover{border-color:var(--tc);color:var(--tc)}
+.tab.tab-rel.on{background:var(--tc);border-color:var(--tc);color:#fff}
+.tab.tab-rel.on .tab-ic{color:#fff!important}
+.tab-sep{width:1px;align-self:stretch;background:var(--border);margin:6px 8px 0}
 
 /* ============ SECTION HEADERS ============ */
 .sec-hdr{display:flex;align-items:baseline;gap:12px;margin:8px 0 16px}
@@ -622,10 +632,15 @@ function renderRail(){
    ============================================================ */
 function renderTabs(){
   var keys = PRODUCT_ORDER.filter(function(k){ return PRODUCTS[k] && PRODUCTS[k].visible; });
-  var html = '<button class="tab'+(VIEW==='estrategica'?' on':'')+'" onclick="setView(\'estrategica\')">'+
-    '<span class="tab-ic">◆</span> Estratégica</button>'+
-    '<button class="tab'+(VIEW==='financeira'?' on':'')+'" style="--tc:#059669" onclick="setView(\'financeira\')">'+
-    '<span class="tab-ic" style="color:#059669">$</span> Financeira</button>'+
+  var html = '<div class="tab-grp">'+
+      '<div class="tab-grp-lbl">Relatórios</div>'+
+      '<div class="tab-grp-btns">'+
+        '<button class="tab tab-rel'+(VIEW==='estrategica'?' on':'')+'" style="--tc:#2563eb" onclick="setView(\'estrategica\')">'+
+          '<span class="tab-ic">◆</span> Estratégica</button>'+
+        '<button class="tab tab-rel'+(VIEW==='financeira'?' on':'')+'" style="--tc:#059669" onclick="setView(\'financeira\')">'+
+          '<span class="tab-ic" style="color:#059669">$</span> Financeira</button>'+
+      '</div>'+
+    '</div><div class="tab-sep"></div>'+
     '<button class="tab'+(VIEW==='acompanhamento'?' on':'')+'" style="--tc:#dc2626" onclick="setView(\'acompanhamento\')">'+
     '<span class="tab-ic" style="color:#dc2626">▲</span> Acompanhamento</button>';
   keys.forEach(function(k){
